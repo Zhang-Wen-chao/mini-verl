@@ -72,6 +72,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-tokens", type=int, default=512)
     parser.add_argument("--tensor-parallel-size", type=int, default=2)
     parser.add_argument("--gpu-memory-utilization", type=float, default=0.60)
+    parser.add_argument(
+        "--variant",
+        choices=(
+            "all",
+            "default_thinking_legacy_prompt",
+            "no_thinking_legacy_prompt",
+            "no_thinking_concise_boxed_prompt",
+            "no_thinking_final_only_boxed_prompt",
+            "no_thinking_short_solution_boxed_prompt",
+        ),
+        default="all",
+        help="Prompt/template variant to measure; batch audits use the accepted short-solution contract.",
+    )
     parser.add_argument("--seed", type=int, default=42)
     return parser.parse_args()
 
@@ -127,7 +140,10 @@ def main() -> int:
         for row_index, row in enumerate(rows):
             content = str(row["prompt"][0]["content"])
             ground_truth = str(row["reward_model"]["ground_truth"])
-            for variant, user_message, enable_thinking in build_variants(content):
+            variants = build_variants(content)
+            if args.variant != "all":
+                variants = [item for item in variants if item[0] == args.variant]
+            for variant, user_message, enable_thinking in variants:
                 rendered = tokenizer.apply_chat_template(
                     [{"role": "user", "content": user_message}],
                     tokenize=False,
@@ -182,6 +198,7 @@ def main() -> int:
         "samples_per_prompt": args.samples_per_prompt,
         "max_tokens": args.max_tokens,
         "tensor_parallel_size": args.tensor_parallel_size,
+        "variant_selection": args.variant,
         "finish_reasons": dict(Counter(str(record["finish_reason"]) for record in records)),
         "by_variant": by_variant,
     }

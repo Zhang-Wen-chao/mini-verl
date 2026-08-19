@@ -144,9 +144,55 @@ rollout audit to select batches with repeated within-group reward variation,
 followed by a new 3+1 short training run that retains the same model, reward
 and 384-token contract.
 
-## Current external blocker
+## Audited 3+1 two-step pass: both updates carried GRPO signal
 
-At 2026-08-19 18:31 CST, GPU 0 is occupied by a root-owned, unrelated FlexRec
-`trainer_main.py` process (PID 3092850). It was not created or modified by this
-work. The launcher requires all four GPUs to be empty, so no new official
-four-GPU job will be started until it exits.
+The earlier six-row run proved the 3+1 memory topology but happened to sample an
+all-zero second batch.  To test the distinct signal-stability question, a
+frozen vLLM audit first sampled OpenR1 rows under the accepted 384-token
+short-solution contract.  It retained only rows that had shown a mixed 0/1
+four-sample reward group with no response-cap hit.  The audit did not update
+weights; it is a selection aid, not a substitute for the training rollouts.
+
+The resulting fresh six-row input selected original positions `0,1,24,25,26,34`
+in that order (three rows per no-shuffle update).  Its parquet SHA-256 is
+`76af24cb1b236b63796946b9cf17079dd8776dc81ae1157b9ab41c70a49d1fbf`; the
+selection audit SHA-256 is
+`fdc215802b4aec92ab45f5f4abb765de604ebc86f442ffe4f1c1a1940cb3fd57`.
+
+Artifact:
+
+```text
+/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/
+qwen3.5-4b-openr1-grpo-two-step-v5-short-trainer3-rollout1-audited-20260819T1847
+```
+
+The pinned upstream/runtime and the 3 FSDP2 trainer + 1 TP=1 vLLM rollout
+topology were unchanged.  Preflight found no compute process on any L20; the
+run subsequently exited `0`, saved complete world-size-3 actor and optimizer
+shards at `global_step_1` and `global_step_2`, and released all four GPUs.
+Total wall time was 491.78 seconds.
+
+| Metric | Step 1 | Step 2 |
+| --- | ---: | ---: |
+| 12 rollout rewards | 4 × 1, 8 × 0 | 7 × 1, 5 × 0 |
+| Per-prompt groups | `[0,1,0,0]`, `[0,0,0,0]`, `[1,1,0,1]` | `[1,1,0,1]`, `[0,0,1,1]`, `[1,1,0,0]` |
+| Reward mean | 0.3333 | 0.5833 |
+| Advantage range | -1.50 to 1.50 | -1.50 to 0.8660 |
+| Actor loss / grad norm | -0.20284 / 8.1991 | 0.02760 / 9.1715 |
+| Mean response length / cap ratio | 112.25 / 0 | 164.25 / 1/12 |
+| Actor allocated / reserved peak (GiB) | 25.50 / 37.88 | 31.53 / 37.92 |
+
+This is the first completed official two-step Qwen3.5-4B GRPO calibration in
+which **both actual training batches** had mixed rewards and non-zero relative
+advantages.  The raw rollout SHA-256 values are
+`26284602bbe80edcb7082190827aad73d4a6ecd921597d13b733a169ffe5f5bb`
+(step 1) and `154914510c04822ee8f5a42e3048e6c726d024c9e23b0088250f757f4b690a79`
+(step 2); the train-log SHA-256 is
+`af11dd155100efb548afbc831d712df907502a954040644c111790e44067a286`.
+
+The 64-row deterministic MATH-lighteval observation was 0.640625 initially,
+0.65625 after step 1, and 0.671875 after step 2.  It remains an observation,
+not a quality claim: two updates, a selected six-row training slice, and 64
+evaluation questions cannot establish generalization.  The legitimate next
+gate is a five-step (15-row) run over the remaining audited, no-cap mixed-signal
+positions before considering the fixed 2,048-row calibration or 10k subset.

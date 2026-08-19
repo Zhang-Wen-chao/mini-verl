@@ -229,3 +229,18 @@ accuracy@1 从 0.625 变为 0.65625，中间 step 1 为 0.671875；样本小且�
 仅记录而不解释为质量提升。下一步是在不占用他人 GPU 的前提下，用冻结权重的
 rollout audit 从 2,048 题中筛出多个可重复出现组内 reward 差异的 batch；再在相同
 3+1 拓扑上做更长但仍小规模的稳定训练，之后才考虑 2,048/10k。
+
+## 2026-08-19：审计筛选后的双步有效更新
+
+该 frozen rollout audit 已完成，随后以原始行号 `0,1,24,25,26,34` 构成六行、
+不 shuffle 的训练输入，在同一 3+1 拓扑上重新从 Qwen 基座运行两步。该训练的实际
+rollout（不是 audit 的复用结果）两步均有混合 0/1 reward：第 1 步为 4/12 正例，
+第 2 步为 7/12 正例；每步均有非零 relative advantage、actor loss 和 grad norm。
+运行以 exit status 0 完成，保存两个 world-size=3 checkpoint，GPU 自动释放；artifact
+为 `qwen3.5-4b-openr1-grpo-two-step-v5-short-trainer3-rollout1-audited-20260819T1847`。
+
+这解除的是“第二步可能没有学习信号”的门槛，不是质量验证。64 题 MATH-lighteval
+accuracy@1 从 0.640625 到 0.671875 仅作记录，不可解释为泛化提升。下一次仍保持模型、
+奖励、prompt 契约、384-token cap、3+1 拓扑和安全 preflight 不变，只将固定的审计
+行扩展为 15 条 / 5 步（每步 3 prompt × 4 rollout）；若它同样 clean exit 且没有
+持续全零 batch，才进入固定 2,048 题的短训设计。

@@ -64,6 +64,12 @@ class RolloutDiagnosticTests(unittest.TestCase):
         self.assertIn("by_max_tokens", text)
         self.assertIn("sample_handle.flush()", text)
 
+    def test_vllm_diagnostic_exposes_short_solution_only_audit_mode(self):
+        text = MODULE_PATH.read_text(encoding="utf-8")
+        self.assertIn('parser.add_argument(\n        "--variant"', text)
+        self.assertIn("no_thinking_short_solution_boxed_prompt", text)
+        self.assertIn("variant_selection", text)
+
 
 if __name__ == "__main__":
     unittest.main()
