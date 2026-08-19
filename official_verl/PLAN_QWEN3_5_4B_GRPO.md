@@ -258,3 +258,11 @@ reward group，正例数依次为 2、5、2、6、4（各 12 条 rollout），gr
 磁盘耗尽，正式 run 使用稀疏 `SAVE_FREQ` 与 `TEST_FREQ`，保留可恢复中间点、最终
 checkpoint、全部 rollout samples、训练日志以及定期的 64 题冻结评测。只有完整 run
 退出后，才能比较基线/中间/最终评测和 reward 统计；中途的训练 reward 不作为质量结论。
+
+在实际启动时，原 2,046 行候选被官方 Qwen3.5 `AutoProcessor` prompt-length filter
+移除了 8 行，故不能声称它恰为 682 个完整 batch。该任务在任何 rollout 前被安全停止；
+最终正式输入严格复现上游 processor 的长度契约，包含 2,037 行 / 679 个完整 batch，
+并已有 upstream 启动日志确认。当前正式 artifact 为
+`qwen3.5-4b-openr1-grpo-2037row-679step-v5-short-trainer3-rollout1-20260819T1919`，
+中点和最终 checkpoint 分别为 step 340 与 679，冻结 64 题评测在 170、340、510、679
+步进行。

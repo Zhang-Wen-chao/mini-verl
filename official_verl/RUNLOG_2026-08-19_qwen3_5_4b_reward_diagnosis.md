@@ -232,3 +232,34 @@ correct for a short fault-localization gate but infeasible for a 683-update
 (2,048-row, batch-size-3) epoch.  The launcher now parameterizes `SAVE_FREQ`
 and `TEST_FREQ`; the next run uses sparse checkpoints and sparse frozen
 validation while still retaining raw rollout samples for every update.
+
+## Formal short run launched: processor-filtered 2,037 rows / 679 steps
+
+Before the formal run, an initial 2,046-row / 682-step launch was stopped during
+initialization, before any rollout or checkpoint, because upstream
+`RLHFDataset` reported only 2,038 rows after its `max_prompt_length=512` filter.
+The startup artifact and log are retained at
+`qwen3.5-4b-openr1-grpo-2046row-682step-v5-short-trainer3-rollout1-20260819T1914`;
+no unrelated process was signalled.  The cause was Qwen3.5's
+conditional-generation `AutoProcessor` path: a standalone tokenizer does not
+reproduce its chat-template length accounting.
+
+The replacement input applies the exact upstream processor contract
+(`apply_chat_template(..., enable_thinking=False, add_generation_prompt=True)`,
+then processor-tokenizer with no added special tokens).  It excludes original
+candidate rows `88,409,752,819,882,1200,1711,2037` as 533--1,855 token prompts,
+selects the first 2,037 of the remaining 2,038 rows, and leaves original row
+2045 for a later run.  Its parquet SHA-256 is
+`acc92db0d549dc9d9996162f620df6db2d871ecf16af971a0b14fd9b84ced567`;
+its audit SHA-256 is
+`2b01f7053f3636cc042181593c0d45faf6dd7336456ad52c5fdabac15ab66419`.
+
+The final formal artifact is
+`qwen3.5-4b-openr1-grpo-2037row-679step-v5-short-trainer3-rollout1-20260819T1919`.
+Upstream has verified `filter dataset len: 2037`, `Size of train dataloader:
+679`, and `Total training steps: 679`.  It is a one-epoch, no-shuffle run with
+the unchanged 3 FSDP2 + 1 TP=1 vLLM topology, `SAVE_FREQ=340`, and
+`TEST_FREQ=170`; it has an initial frozen 64-row MATH-lighteval accuracy@1 of
+0.65625.  At the time this record was written it had completed the first two
+real updates without an error.  Final reward, checkpoint, and evaluation claims
+must wait for its clean exit.
