@@ -196,3 +196,39 @@ not a quality claim: two updates, a selected six-row training slice, and 64
 evaluation questions cannot establish generalization.  The legitimate next
 gate is a five-step (15-row) run over the remaining audited, no-cap mixed-signal
 positions before considering the fixed 2,048-row calibration or 10k subset.
+
+## Five-step signal-stability gate
+
+The 15-row, no-shuffle follow-up used original audited OpenR1 positions
+`0,1,13,24,25,26,34,50,51,52,59,64,66,68,71`, batch size 3, four rollouts
+per prompt, and the same pinned 3 FSDP2 + 1 TP=1 vLLM topology.  Input parquet
+SHA-256: `58d69c813c422f7960cc4f7b98d4d43eb7bc18f634d4c458be56cb3e418c097c`.
+
+Artifact:
+
+```text
+/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/
+qwen3.5-4b-openr1-grpo-five-step-v5-short-trainer3-rollout1-audited-20260819T1857
+```
+
+It completed all five updates, saved `global_step_1` through `global_step_5`
+with model and optimizer shards, exited 0, and released all GPUs.  The five
+actual rollout batches had respectively 2/12, 5/12, 2/12, 6/12, and 4/12
+positive rewards; their mixed-reward prompt-group counts were 2/3, 3/3, 1/3,
+1/3, and 3/3.  Consequently every update had at least one usable relative
+advantage group and a non-zero actor gradient norm (7.36, 8.82, 4.48, 4.77,
+8.72).  Response cap ratios were 0, 0, 1/12, 1/12, and 0.
+
+The initial and final 64-row deterministic MATH-lighteval accuracy@1 were
+0.65625 and 0.640625, with a temporary 0.671875 at updates 3 and 4.  This is
+not evidence of degradation or improvement: it is a tiny, selected 15-question
+training slice and a 64-question diagnostic evaluation.  It *does* clear the
+engineering gate for the fixed 2,048-row calibration: five consecutive stable
+FSDP2/vLLM updates with no all-zero batch and no OOM.
+
+The five-step artifact consumes 266 GiB because the calibration launcher saves
+a full world-size-3 model and optimizer checkpoint after every update.  That is
+correct for a short fault-localization gate but infeasible for a 683-update
+(2,048-row, batch-size-3) epoch.  The launcher now parameterizes `SAVE_FREQ`
+and `TEST_FREQ`; the next run uses sparse checkpoints and sparse frozen
+validation while still retaining raw rollout samples for every update.

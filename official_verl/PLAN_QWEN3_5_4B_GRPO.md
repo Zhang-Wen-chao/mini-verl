@@ -244,3 +244,17 @@ accuracy@1 从 0.640625 到 0.671875 仅作记录，不可解释为泛化提升�
 奖励、prompt 契约、384-token cap、3+1 拓扑和安全 preflight 不变，只将固定的审计
 行扩展为 15 条 / 5 步（每步 3 prompt × 4 rollout）；若它同样 clean exit 且没有
 持续全零 batch，才进入固定 2,048 题的短训设计。
+
+## 2026-08-19：五步门槛通过，进入 2,048 行短训
+
+15 条审计行的五步 run 已 clean exit：五个实际训练 batch 均至少有一个 0/1 混合
+reward group，正例数依次为 2、5、2、6、4（各 12 条 rollout），gradient norm 为
+7.36、8.82、4.48、4.77、8.72；没有 all-zero batch 或 OOM，完整保存
+`global_step_1` 到 `global_step_5`。因此当前契约足以进入固定的 2,048 行一轮短训，
+不再重复小切片试验。
+
+正式短训仍不等于“模型已学会”：`train_batch_size=3` 意味着约 683 个 update，按本机
+实测约 80--100 秒/update，预估 15--19 小时。为避免每步 checkpoint 约 53 GiB 导致
+磁盘耗尽，正式 run 使用稀疏 `SAVE_FREQ` 与 `TEST_FREQ`，保留可恢复中间点、最终
+checkpoint、全部 rollout samples、训练日志以及定期的 64 题冻结评测。只有完整 run
+退出后，才能比较基线/中间/最终评测和 reward 统计；中途的训练 reward 不作为质量结论。

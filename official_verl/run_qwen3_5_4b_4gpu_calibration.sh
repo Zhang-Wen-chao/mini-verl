@@ -46,8 +46,10 @@ ACTOR_PARAM_OFFLOAD=${ACTOR_PARAM_OFFLOAD:-false}
 TRAINER_GPUS=${TRAINER_GPUS:-2}
 ROLLOUT_GPUS=${ROLLOUT_GPUS:-2}
 ROLLOUT_TP=${ROLLOUT_TP:-2}
+SAVE_FREQ=${SAVE_FREQ:-1}
+TEST_FREQ=${TEST_FREQ:-1}
 
-if (( TRAINING_STEPS <= 0 || TRAIN_BATCH_SIZE <= 0 || PPO_MINI_BATCH_SIZE <= 0 || ROLLOUT_N <= 0 || AGENT_NUM_WORKERS <= 0 || TRAINER_GPUS <= 0 || ROLLOUT_GPUS <= 0 || ROLLOUT_TP <= 0 )); then
+if (( TRAINING_STEPS <= 0 || TRAIN_BATCH_SIZE <= 0 || PPO_MINI_BATCH_SIZE <= 0 || ROLLOUT_N <= 0 || AGENT_NUM_WORKERS <= 0 || TRAINER_GPUS <= 0 || ROLLOUT_GPUS <= 0 || ROLLOUT_TP <= 0 || SAVE_FREQ <= 0 || TEST_FREQ <= 0 )); then
   echo "training, rollout, worker, and topology values must be positive" >&2
   exit 2
 fi
@@ -167,8 +169,8 @@ set +e
   trainer.rollout_data_dir="$RUN_ROOT/rollout_samples" \
   trainer.validation_data_dir="$RUN_ROOT/validation_samples" \
   trainer.log_val_generations=10 \
-  trainer.save_freq=1 \
-  trainer.test_freq=1 \
+  trainer.save_freq="$SAVE_FREQ" \
+  trainer.test_freq="$TEST_FREQ" \
   trainer.total_epochs=1 \
   trainer.total_training_steps="$TRAINING_STEPS" \
   trainer.nnodes=1 \
