@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mini-verl"
+version = "0.1.0"
+description = "A minimal, testable LLM reinforcement-learning training framework"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+torch = ["torch==2.7.0"]
+hf = ["transformers==5.9.0"]
+
+[tool.setuptools.packages.find]
+include = ["mini_verl*"]
