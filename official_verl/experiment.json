@@ -1,0 +1,33 @@
+{
+  "name": "official-verl-grpo-gsm8k-smoke",
+  "purpose": "Run the official verl GRPO path before reproducing it in mini-verl.",
+  "algorithm": "grpo",
+  "task": {
+    "kind": "verifiable_math",
+    "dataset": "GSM8K",
+    "reward": "official_gsm8k_rule_reward",
+    "required_columns": ["prompt", "answer"],
+    "response_contract": "Follow the upstream GSM8K prompt and end with `#### <integer>`; score the final integer using verl's rule reward."
+  },
+  "model": {
+    "development_scale": "Qwen3-0.6B for the official 4-GPU smoke",
+    "formal_scale": "4B instruct model",
+    "optional_scale_up": "8B after the 4B run is reproducible"
+  },
+  "smoke_run": {
+    "train_examples_max": 256,
+    "eval_examples_max": 64,
+    "group_size": 4,
+    "max_prompt_tokens": 512,
+    "max_response_tokens": 256,
+    "epochs_max": 1,
+    "seed": 42
+  },
+  "promotion_gates": [
+    "Official verl revision is captured in official_verl/verl.lock.json.",
+    "The official repository contains a GRPO example or config selected by the operator.",
+    "Reward is neither all zero nor all one on the smoke rollout.",
+    "Metrics include reward, KL, response length, and a saved checkpoint.",
+    "The held-out verifier evaluation runs before and after training."
+  ]
+}

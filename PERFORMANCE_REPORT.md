@@ -1,5 +1,28 @@
 # mini-verl 性能记录
 
+## 2026-08-19：官方 verl 4-GPU GRPO smoke（完成）
+
+L20 上使用锁定为 `c4b389adadc58ce51cb2b63e70df497ca166d77f` 的官方 `verl`
+codeload 快照、Qwen3-0.6B revision `c1899de289a04d12100db370d81485cdf75e47ca`
+与 GSM8K `256/64` train/test parquet，完成了一次真实官方 GRPO 训练。拓扑是
+GPU 0/1 的 FSDP2 actor trainer 加 GPU 2/3 的 TP=2 vLLM rollout；总共 16 个
+optimizer steps。`global_step_16` 的两份模型分片各 1,503,446,571 bytes、两份
+optimizer 分片各 2,384,226,344 bytes。训练后 driver 在清理阶段自然退出，四卡
+均恢复到 `4 MiB / 0%`。
+
+运行时是可从同一 pinned source + `uv.lock` 重建的容器本地环境
+`/tmp/official-verl-local-fsdp-vllm`，而模型、数据和产物在持久盘。该选择仅为
+规避共享文件系统上 CUDA 包解压极慢；它没有改变源码或 lock。锁定 preflight
+确认 Python 3.12、Torch `2.11.0+cu130`、Transformers `5.5.3`、Ray `2.55.1`、
+vLLM `0.24.0` 以及四张 46,068 MiB L20 均可用。
+
+末步实测：训练 reward 均值 `0.015625`、actor KL `0.0007783`、actor loss
+`0.0002129`、吞吐约 `914.8 tokens/s`、held-out GSM8K accuracy `0`。回答平均
+255.75/256 tokens，clip ratio `0.96875`，因此这次只验收为基础设施 smoke，
+不作为模型质量或 GRPO 收敛结论。4B 之前必须先使用非截断响应长度、测量显存
+余量与非退化 reward 分布，再做 held-out 对照。完整运行记录位于持久化 artifact
+目录的 `RUNLOG.md`。
+
 ## 2026-08-18：toy GRPO Controller
 
 ### 目的与边界

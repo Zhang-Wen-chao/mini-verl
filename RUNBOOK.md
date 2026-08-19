@@ -11,6 +11,15 @@ PYTHONPATH=. python3 examples/phase0_smoke.py
 
 PyTorch and Transformers tests are skipped rather than failed when optional dependencies are absent.
 
+## Official verl GRPO smoke (Linux/CUDA only)
+
+The first real-model experiment uses the official framework rather than this
+repository's implementation. Its pinned-upstream workflow, GSM8K conversion,
+strict verifier, and acceptance gates are in
+[official_verl/README.md](official_verl/README.md). Do not run it from the current
+macOS development host: it requires a Linux CUDA machine and an explicit official
+verl release tag or immutable commit.
+
 For a reproducible run, create a RunConfig with the seed, selected device and deterministic flag, then call seed_everything before model construction or rollout.
 
 ## GPU validation

@@ -123,12 +123,24 @@ mini-verl/
 
 完整复现命令和口径见 [RUNBOOK.md](RUNBOOK.md)；最近一次 L20 toy CUDA 基准的环境、命令、原始 JSON 与解释见 [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md)。
 
-## 上游 verl 对照
+## 官方 verl 实验（下一阶段）
 
-`main` 只维护本项目的最小实现、测试与本地性能记录。官方
-[`verl`](https://github.com/volcengine/verl) 的锁定环境、Qwen/GSM8K smoke、运行
-工件与源码映射属于 `official-verl-grpo` 开发分支；它们与这里的教学实现刻意
-分离，避免把一次特定的多卡系统实验误当作 mini-verl 的功能或性能结论。
+`mini-verl` 的下一步不是立即扩大框架范围，而是先用官方
+[`verl`](https://github.com/volcengine/verl) 跑通一条可验证的 GRPO 训练。
+实验契约、GSM8K 数据转换/严格 `\boxed{integer}` 奖励、上游 commit 锁定、
+Linux/CUDA preflight 与运行记录模板位于
+[official_verl/README.md](official_verl/README.md)。先完成 Qwen3-0.6B 的 4-GPU
+systems smoke 并保存
+reward、KL、长度、checkpoint 和 held-out 评测，之后再回到本项目逐项映射
+`dataset → rollout → reward → advantage → actor/reference logprob → update`。
+
+这条官方链路已在 2026-08-18 完成首次真实执行：Qwen3-0.6B、OpenAI GSM8K
+256/64 split、GRPO、4 x L20（2 FSDP2 trainer + 2 TP=2 vLLM rollout）、16/16
+checkpoint。它证明的是官方 FSDP2 + vLLM 训练/生成/验证/存档链路真实可用，
+不是质量提升：held-out `acc@1` 从 `0.015625` 到 `0.0`。因此下一步应先做
+4B 的显存预算和短 smoke，再把这条精确数据流映射为 mini-verl 的单机可验证版；
+不要把这个 0.6B、16-step 结果当作可推广的训练配方。完整复现边界与运行记录
+位置见 [official_verl/README.md](official_verl/README.md)。
 
 ## 最小面试表述
 
