@@ -8,6 +8,7 @@ SCRIPT = OFFICIAL_VERL_DIR / "run_qwen3_0_6b_4gpu_smoke.sh"
 LOCAL_BOOTSTRAP = OFFICIAL_VERL_DIR / "bootstrap_local_official_env.sh"
 WAIT_AND_RUN = OFFICIAL_VERL_DIR / "wait_and_run_qwen3_0_6b_4gpu_smoke.sh"
 CALIBRATION = OFFICIAL_VERL_DIR / "run_qwen3_5_4b_4gpu_calibration.sh"
+WAIT_AND_RUN_CALIBRATION = OFFICIAL_VERL_DIR / "wait_and_run_qwen3_5_4b_4gpu_calibration.sh"
 
 
 class OfficialVerlSmokeScriptTests(unittest.TestCase):
@@ -42,18 +43,48 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         self.assertIn("flock -n", text)
         self.assertIn('("torch", "transformers", "ray", "vllm", "verl")', text)
 
+    def test_calibration_waiter_never_manipulates_foreign_processes(self):
+        subprocess.run(["bash", "-n", str(WAIT_AND_RUN_CALIBRATION)], check=True)
+        text = WAIT_AND_RUN_CALIBRATION.read_text(encoding="utf-8")
+        self.assertIn("nvidia-smi --query-compute-apps=pid", text)
+        self.assertIn("will not kill or alter foreign processes", text)
+        self.assertIn("flock -n", text)
+        self.assertIn("starting official GRPO calibration", text)
+        self.assertNotIn("kill -", text)
+        self.assertNotIn("pkill", text)
+
     def test_4b_calibration_is_bounded_and_persists_generations(self):
         subprocess.run(["bash", "-n", str(CALIBRATION)], check=True)
         text = CALIBRATION.read_text(encoding="utf-8")
         self.assertIn("TRAINING_STEPS=${TRAINING_STEPS:-2}", text)
         self.assertIn("trainer.total_training_steps=\"$TRAINING_STEPS\"", text)
-        self.assertIn("data.train_batch_size=2", text)
+        self.assertIn("TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-2}", text)
+        self.assertIn("data.train_batch_size=\"$TRAIN_BATCH_SIZE\"", text)
+        self.assertIn("PPO_MINI_BATCH_SIZE=${PPO_MINI_BATCH_SIZE:-2}", text)
+        self.assertIn("PPO_MINI_BATCH_SIZE must not exceed TRAIN_BATCH_SIZE", text)
+        self.assertIn("actor_rollout_ref.actor.ppo_mini_batch_size=\"$PPO_MINI_BATCH_SIZE\"", text)
+        self.assertIn("ACTOR_PARAM_OFFLOAD=${ACTOR_PARAM_OFFLOAD:-false}", text)
+        self.assertIn("actor_rollout_ref.actor.fsdp_config.param_offload=\"$ACTOR_PARAM_OFFLOAD\"", text)
+        self.assertIn("TRAINER_GPUS=${TRAINER_GPUS:-2}", text)
+        self.assertIn("ROLLOUT_GPUS=${ROLLOUT_GPUS:-2}", text)
+        self.assertIn("ROLLOUT_TP=${ROLLOUT_TP:-2}", text)
+        self.assertIn("TRAINER_GPUS + ROLLOUT_GPUS must equal the four visible GPUs", text)
+        self.assertIn("ROLLOUT_GPUS must be divisible by ROLLOUT_TP", text)
+        self.assertIn("TRAIN_BATCH_SIZE * ROLLOUT_N must be divisible by TRAINER_GPUS", text)
+        self.assertIn("ROLLOUT_N=${ROLLOUT_N:-4}", text)
+        self.assertIn("AGENT_NUM_WORKERS=${AGENT_NUM_WORKERS:-8}", text)
+        self.assertIn("TRAIN_BATCH_SIZE * ROLLOUT_N must be divisible by AGENT_NUM_WORKERS", text)
+        self.assertIn("actor_rollout_ref.rollout.n=\"$ROLLOUT_N\"", text)
+        self.assertIn("actor_rollout_ref.rollout.agent.num_workers=\"$AGENT_NUM_WORKERS\"", text)
+        self.assertIn("actor_rollout_ref.rollout.tensor_model_parallel_size=\"$ROLLOUT_TP\"", text)
+        self.assertIn("trainer.n_gpus_per_node=\"$TRAINER_GPUS\"", text)
+        self.assertIn("rollout.n_gpus_per_node=\"$ROLLOUT_GPUS\"", text)
         self.assertIn("MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH:-384}", text)
         self.assertIn("MAX_MODEL_LEN=${MAX_MODEL_LEN:-$((MAX_PROMPT_LENGTH + MAX_RESPONSE_LENGTH))}", text)
         self.assertIn("data.max_response_length=\"$MAX_RESPONSE_LENGTH\"", text)
         self.assertIn("data.shuffle=False", text)
         self.assertIn("+data.apply_chat_template_kwargs.enable_thinking=false", text)
-        self.assertIn("actor_rollout_ref.actor.ppo_mini_batch_size=2", text)
+        self.assertIn("actor_rollout_ref.actor.ppo_mini_batch_size=\"$PPO_MINI_BATCH_SIZE\"", text)
         self.assertIn("actor_rollout_ref.actor.fsdp_config.offload_policy=True", text)
         self.assertIn("actor_rollout_ref.actor.fsdp_config.optimizer_offload=True", text)
         self.assertIn("override_optimizer_config={foreach: false}", text)
@@ -62,6 +93,7 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         self.assertIn("+actor_rollout_ref.rollout.engine_kwargs.vllm.disable_custom_all_reduce=True", text)
         self.assertIn("checkpoint_engine.update_weights_bucket_megabytes=3072", text)
         self.assertIn("MINI_VERL_FORCE_MMAP_WEIGHT_TRANSFER", text)
+        self.assertIn("PYTORCH_CUDA_ALLOC_CONF_VALUE=${PYTORCH_CUDA_ALLOC_CONF_VALUE:-}", text)
         self.assertIn("trainer.rollout_data_dir=", text)
         self.assertIn("trainer.validation_data_dir=", text)
         self.assertIn("nvidia-smi --query-compute-apps", text)

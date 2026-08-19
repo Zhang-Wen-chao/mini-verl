@@ -1,6 +1,7 @@
 # Qwen3.5-4B 官方 verl GRPO 计划
 
-状态：**模型、数据转换与冻结 reward 诊断已完成；官方 4-GPU GRPO 的有效更新尚未验收。**
+状态：**官方 4-GPU 训练链路、单步有效 GRPO 更新与 3+1 两步稳定性均已验收；
+尚未进入 2,048/10k 短训。**
 
 > 2026-08-19 最新门槛：原始 256-token、512-token 及“只输出答案”配置均不能
 > 给 GRPO 产生可用的组内差异。冻结的真实 OpenR1 rollout 证明“最多三句短解答
@@ -44,7 +45,8 @@ type、chat template、vLLM 0.24.0 加载和 rollout log-prob 路径。不能仅
 
 - 上游 verl revision：`c4b389adadc58ce51cb2b63e70df497ca166d77f`。
 - 锁定 runtime：同一 `uv.lock`、FSDP2 actor/reference、vLLM rollout、Ray。
-- 拓扑：GPU 0--1 训练，GPU 2--3 vLLM，rollout TP=2。
+- 拓扑：资源校准默认用 GPU 0--1 FSDP2 训练、GPU 2--3 TP=2 vLLM；通过
+  3 trainer + 1 TP=1 rollout 的受控两步实验后，后续 4B 短训优先使用后者。
 - 算法：GRPO；奖励首先仍使用可验证的数学最终答案规则奖励。
 - 运行前安全检查：确认四张 L20 的显存、利用率和 compute process，绝不抢占
   他人作业；显式设置 `NCCL_SHM_DISABLE=1` 与
@@ -178,6 +180,20 @@ verifier/上限。首选聊天模型正是为了降低“base 模型不遵守作
    update -> metrics”映射回 mini-verl；mini-verl 保持单机教学实现，不复制
    Ray/FSDP/vLLM 的生产编排。
 
+## 2026-08-19：官方单步通过；两步显存边界
+
+官方单步 artifact `qwen3.5-4b-openr1-grpo-one-step-v5-short-20260819T1705` 已以
+exit status 0 完成，并保存完整 `global_step_1`。其 reward mean 为 0.375，
+advantage 范围 [-1.50, 0.50]，actor loss 为 -0.00498，grad norm 为 6.54，
+回答平均 116 token 且没有 response-cap 截断。因此，384-token 短解答契约已在
+官方 vLLM/FSDP2 路径中成立。
+
+两步校准另定位了两个独立 upstream 约束：`train_batch_size * rollout.n` 必须能被
+agent-loop worker 数均分（启动器现会在模型初始化前检查）；合法拓扑均能完成并保存
+第 1 步，但第 2 步 actor update 在 GPU 0 固定额外申请约 1.19 GiB 时 OOM。
+参数 offload 和 PyTorch `expandable_segments:True` 已验证不能消除这个 update 峰值。
+该边界不是 reward 退化、数据耗尽或 vLLM 故障。
+
 ## 当前状态与下一步
 
 已完成：OpenR1 转换、MATH/GSM8K exact de-dup、官方 `math_reward` router
@@ -188,8 +204,28 @@ verifier/上限。首选聊天模型正是为了降低“base 模型不遵守作
 reward 全零，因此两者都不是有效质量训练。
 
 新 v5 数据固定短解答契约：2,048 行训练、64 行验证以及一个行号为 `0,1` 的两行
-校准 slice。启动器使用 `data.shuffle=False`、384-token response、group=4，且支持
-`TRAINING_STEPS=1`。下一次四卡都空闲时，先在这个两行 slice 做**一条**官方
-vLLM/FSDP GRPO update；验收条件是原始 rollout 仍出现同题 reward 差异，且
-reward/advantage/actor loss/gradient norm 不再全部为零。仅通过这一关，才创建新的
-两步 artifact；在此之前不进入 10k 训练。
+校准 slice。官方单步已通过该门槛。接下来不再重复 2 trainer + 2 rollout 的 allocator
+微调，而是将四卡划为 **3 张 FSDP2 trainer + 1 张 TP=1 vLLM rollout**。这会降低
+每张 trainer 卡的模型、梯度与 optimizer shard 压力，同时仍只使用已空闲的四张卡。
+
+首个 3+1 验证已用从冻结 2,048 题中创建的全新六题、无 shuffle slice：
+`train_batch_size=3`、`rollout.n=4`、`ppo_mini_batch_size=3`、4 个 agent worker 和
+两步。每步生成 12 条 trajectory，既能被 3 张 trainer 卡整除，也能被 4 个 reward
+worker 均分。它从 Qwen 基座重新开始，**没有**加载 2+2 FSDP checkpoint。
+
+artifact `qwen3.5-4b-openr1-grpo-two-step-v5-short-trainer3-rollout1-20260819T1820`
+以 `exit_status=0` 完成（总时长 576.66 秒），完整保存 world-size=3 的
+`global_step_1` 与 `global_step_2` actor/optimizer shards。TP=1 vLLM 的加载、
+weight sync、rollout 和两次 FSDP2 update 都成功，故 3+1 解决了 2+2 拓扑的第二次
+update OOM 边界。第 1 步 12 条 rollout 的 reward 为 11 个 0、1 个 1，产生
+advantages `[-0.50, 1.50]`、actor loss `-0.02173`、grad norm `4.07`，且没有
+response cap 截断；这是一次真实的非退化 GRPO 更新。第 2 步的 12 条 reward 恰好
+全为 0，因而 policy-gradient loss 为 0、grad norm 约 `0.0014`，尽管 update/checkpoint
+仍完整完成。
+
+因此这条 run 证明**内存与系统稳定性**，也证明至少一个 batch 能产生有效学习信号；
+它不证明两步已让模型泛化提升，更不能据此跳到 10k。初始/最终 64 题 MATH-lighteval
+accuracy@1 从 0.625 变为 0.65625，中间 step 1 为 0.671875；样本小且步数太少，
+仅记录而不解释为质量提升。下一步是在不占用他人 GPU 的前提下，用冻结权重的
+rollout audit 从 2,048 题中筛出多个可重复出现组内 reward 差异的 batch；再在相同
+3+1 拓扑上做更长但仍小规模的稳定训练，之后才考虑 2,048/10k。
