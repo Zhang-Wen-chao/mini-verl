@@ -19,9 +19,23 @@ RolloutWorker (actor policy v_k) -- trajectories --> RewardWorker
                               policy v_(k+1)
 ```
 
+## 三分钟跑通
+
+```bash
+python -m pip install -e '.[torch]'
+mini-verl-toy
+# 或：python -m mini_verl.toy
+```
+
+这条 CPU、无模型下载的最小训练会打印从 `initial_pass@1=0.125` 到
+`final_pass@1=1.000` 的可验证提升。核心代码在
+[`mini_verl/toy.py`](mini_verl/toy.py)：它只替换了语言模型本身，保留了
+verl 最关键的 rollout → old logprob → reward → group advantage → clipped
+GRPO update → policy version 数据流。阅读顺序见 [CORE.md](CORE.md)。
+
 ## v0 范围与非目标
 
-**首个可交付版本：**单机单卡/多卡，基于 Hugging Face 模型的生成，规则奖励，GRPO，reference-KL，策略版本同步，以及可复现的数学推理/格式验证任务。
+**首个可交付版本：**一个无需下载模型、可在 CPU 上运行的最小 GRPO 闭环，以及同一数据契约下的 Hugging Face 单机/多卡参考 backend：规则奖励、reference-KL、策略版本同步和可复现的格式验证任务。
 
 **刻意不做：**完整 verl API 兼容、Ray 集群编排、多模态、任意模型/奖励模型兼容、生产级容错；这些会在核心闭环已正确且有 benchmark 的前提下再逐步扩展。
 
@@ -49,7 +63,7 @@ RolloutWorker (actor policy v_k) -- trajectories --> RewardWorker
 - padding token 不参与 loss；
 - 在固定的小任务上，训练后平均 reward 和 pass@1 相对初始策略可重复提升。
 
-当前已完成：依赖无模型下载的 toy GRPO 闭环、Controller 驱动的 Hugging Face CausalLM rollout/old-logprob/trainer 集成路径，以及可指向完整本地模型快照的 Qwen GPU smoke 脚本。
+当前已完成：依赖无模型下载的 toy GRPO 闭环，以及 Controller 驱动的 Hugging Face CausalLM rollout/old-logprob/trainer 集成路径。最短入口是 `python -m mini_verl.toy`；它在一个小型 categorical policy 上真实执行 rollout、规则奖励、组内 advantage、clipped GRPO update 与 policy version 推进。通用的本地 Hugging Face 模型 smoke 位于 `examples/hf_grpo_smoke.py`，不依赖官方 verl。
 
 ### Phase 2 — 框架化与分布式训练
 
@@ -62,7 +76,7 @@ RolloutWorker (actor policy v_k) -- trajectories --> RewardWorker
 
 ### Phase 3 — 训推协同与性能实验
 
-- [x] 抽象 rollout backend：`RolloutWorker` 协议已支持 HF generate；mini-vllm backend 待接入。
+- [x] 抽象 rollout backend：`RolloutWorker` 协议已支持 HF generate；vLLM/SGLang backend 不是 main 的 v0 范围。
 - [x] 实现阶段式同步 Controller，以及 one-step policy-lag 的 PrefetchingController：learner 优化当前 batch 时，用独立 rollout 副本预取同版本的后继 batch；待生成完成后才同步副本到下一版本，后继 batch 以最多一代 lag 被消费。资源分离的多进程/多节点流水线待实现。
 - [x] 记录 rollout（含可选 generate prefill/decode/old-logprob forward）、reward、训练、权重同步阶段耗时、token 吞吐、PyTorch allocator 峰值显存与 opt-in 的 `nvidia-smi` 设备级利用率采样。
 - [x] 增加离线构造 tiny GPT-2 的 Hugging Face 端到端阶段基准：实际执行 `generate`、old-logprob 回算和 CausalLM GRPO 更新，分别报告 rollout/reward/train；仍不等同于真实业务模型。
@@ -75,15 +89,13 @@ RolloutWorker (actor policy v_k) -- trajectories --> RewardWorker
 - [x] 将相同 admission 工作负载接入双 GPU trainer/rollout 同步与 one-step-lag prefetch benchmark，并从真实 rollout 输出 admission 指标。`sequence budget=240`、峰值 `232/240` 下，prefetch 将稳态 iteration `68.319 → 62.346 ms`（-8.7%）；受限 rollout 仍有 46.060 ms wait tail，说明第二张 GPU 只能隐藏训练窗口内约 14.9 ms 的生成。
 - [x] 将 trainer-side length bucketing 落到真实 GRPO update：多个长度微批按有效 response-token 加权累积梯度、仍只做一次 optimizer step；CUDA 数值回归确认其与同一整批 SGD update 一致。端到端上将训练 padding `33.69% → 3.69%`、trainer allocator 峰值 `27.59 → 21.02 MiB`，但单卡 train `9.010 → 21.616 ms`；双卡 prefetch 可把更长训练窗口的 33.6 ms 与 rollout 重叠，最终仍应按延迟/显存目标选择。
 - [x] 增加双 GPU trainer/rollout 副本的同步 vs one-step-lag prefetch 基准：逐 prompt rollout 时测得 11.4 ms overlap、稳态 iteration `72.928 → 69.000 ms`；micro-batch 后仍可隐藏 11.4 ms，iteration `27.444 → 23.096 ms`。输出完整 rollout、未隐藏等待、有效重叠和 cross-device 全量权重同步耗时。
-- [~] 已固定 tiny GPT-2 的真实 HF `generate + old-logprob + GRPO` 基准，完成 `group_size=2/4`、`rollout_batch_size=1/4`、length-bucketing 对照：micro-batching 将 response token 吞吐从 852.8 提升到 2355.0 tok/s；双 GPU prefetch 在生成主导 workload 仅改善 5.4%；length bucketing 将 padding 从 42.5% 降至 0、real-token 吞吐提升 6.0%，vLLM/SGLang backend 待扩展。
+- [x] 已固定 tiny GPT-2 的真实 HF `generate + old-logprob + GRPO` 基准，完成 `group_size=2/4`、`rollout_batch_size=1/4`、length-bucketing 对照：micro-batching 将 response token 吞吐从 852.8 提升到 2355.0 tok/s；双 GPU prefetch 在生成主导 workload 仅改善 5.4%；length bucketing 将 padding 从 42.5% 降至 0、real-token 吞吐提升 6.0%。vLLM/SGLang 属于另一个 serving 项目，而非 mini-verl v0。
 
 **验收：**每一组优化都有固定模型、prompt、warmup、硬件、序列长度分布和统计口径；报告端到端 iteration time 与每个阶段的归因，而不是只报告单点吞吐。
 
-### Phase 4 — 可选算法与业务扩展
+### v0 完成边界
 
-- [ ] PPO：补充 critic/value model、GAE 与 actor/critic 的资源管理。
-- [ ] Reward model / executable verifier 与 Agent 工具调用轨迹。
-- [ ] 多机、异构硬件和故障恢复。
+`main` 的核心 GRPO 闭环已经完成：`python -m mini_verl.toy` 是最短、无下载的可执行验收；Hugging Face、DDP、异步 rollout 和 bucketing 是在同一协议上增加的参考实现。PPO/critic/GAE、reward model、Agent 工具轨迹、多机容错和 serving backend 都是独立后续项目，不应以“补全 mini-verl”为由混入此主线。
 
 ## 建议目录
 
@@ -92,6 +104,7 @@ mini-verl/
 ├── README.md
 ├── mini_verl/
 │   ├── protocol.py       # trajectory 数据契约、版本、校验
+│   ├── toy.py            # 最小可执行 GRPO 闭环
 │   ├── hf.py             # Hugging Face rollout / trainer backend
 │   ├── reward.py         # rule / model reward
 │   ├── algorithms/grpo.py

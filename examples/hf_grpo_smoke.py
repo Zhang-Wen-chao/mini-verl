@@ -1,8 +1,8 @@
-"""Run one real Qwen causal-LM rollout/reward/GRPO-update iteration.
+"""Run one local Hugging Face CausalLM rollout/reward/GRPO update.
 
-Pass a local Hugging Face snapshot or model directory. The reward intentionally
-uses sample_index only to force a non-degenerate group for a systems smoke test;
-it is not a language-quality metric.
+This is a backend-plumbing smoke, not a quality evaluation. It uses a
+deterministic per-sample reward only to make the GRPO advantage non-degenerate.
+Pass a complete local model snapshot; no network download is attempted.
 """
 
 from __future__ import annotations
@@ -19,18 +19,18 @@ from mini_verl.workers import RuleRewardWorker
 
 
 def smoke_reward(trajectory: Trajectory) -> float:
-    """Deterministically produce two different rewards per prompt group."""
+    """Produce two reward values per prompt group without judging text quality."""
     return float(trajectory.metadata["sample_index"] == 0)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model", required=True, help="Local Hugging Face model snapshot or model directory")
+    parser.add_argument("--model", required=True, help="Complete local Hugging Face model snapshot")
     parser.add_argument("--max-new-tokens", type=int, default=8)
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
-        raise RuntimeError("This smoke script requires CUDA")
+        raise RuntimeError("this CausalLM smoke requires CUDA")
     torch.manual_seed(11)
     tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True)
     if tokenizer.pad_token_id is None:
@@ -39,15 +39,14 @@ def main() -> None:
         args.model, local_files_only=True, torch_dtype=torch.bfloat16
     ).to("cuda")
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-6)
-    prompts = [
-        PromptExample("Reply with a one-sentence greeting.", {"task": "greeting"}),
-        PromptExample("What is 2 + 2? Answer briefly.", {"task": "arithmetic"}),
-    ]
     controller = Controller(
         rollout_worker=HuggingFaceRolloutWorker(
             model=model,
             tokenizer=tokenizer,
-            prompts=prompts,
+            prompts=(
+                PromptExample("Reply with a one-sentence greeting.", {"task": "greeting"}),
+                PromptExample("What is 2 + 2? Answer briefly.", {"task": "arithmetic"}),
+            ),
             group_size=2,
             max_new_tokens=args.max_new_tokens,
         ),

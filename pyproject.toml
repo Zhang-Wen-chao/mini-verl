@@ -12,7 +12,10 @@ dependencies = []
 
 [project.optional-dependencies]
 torch = ["torch==2.7.0"]
-hf = ["transformers==5.9.0"]
+hf = ["torch==2.7.0", "transformers==5.9.0"]
+
+[project.scripts]
+mini-verl-toy = "mini_verl.toy:main"
 
 [tool.setuptools.packages.find]
 include = ["mini_verl*"]

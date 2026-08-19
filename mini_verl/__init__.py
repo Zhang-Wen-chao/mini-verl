@@ -21,6 +21,7 @@ from .config import RunConfig, seed_everything
 from .pipeline import AsyncRolloutBuffer, BufferedRollout
 from .async_controller import PrefetchingController
 from .observability import CudaMemoryMonitor, CudaMemoryStats, GpuUtilizationMonitor, GpuUtilizationStats
+from .toy import ToyRunResult, run_toy_grpo
 
 __all__ = [
     "Controller",
@@ -50,10 +51,12 @@ __all__ = [
     "PolicyHandle",
     "PolicySynchronizer",
     "TrainerWorker",
+    "ToyRunResult",
     "Trajectory",
     "TrajectoryBatch",
     "TrajectoryValidationError",
     "response_logprobs_from_logits",
+    "run_toy_grpo",
     "initialize_distributed",
     "load_checkpoint",
     "length_bucket_batches",

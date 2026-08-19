@@ -11,6 +11,30 @@ PYTHONPATH=. python3 examples/phase0_smoke.py
 
 PyTorch and Transformers tests are skipped rather than failed when optional dependencies are absent.
 
+## Smallest complete GRPO run
+
+Install only PyTorch, then run the package entry point. It downloads no model and
+works on CPU; its categorical policy exists solely to make the complete GRPO
+data flow inspectable.
+
+```bash
+python -m pip install -e '.[torch]'
+python -m mini_verl.toy
+# equivalent compatibility entry point
+PYTHONPATH=. python examples/toy_grpo_train.py
+```
+
+The run must improve `final_pass@1` over `initial_pass@1`. Each iteration is
+the same contract used by larger backends:
+
+```text
+sample G responses with old logprobs
+→ rule reward
+→ group-relative advantage
+→ clipped GRPO update
+→ policy version + 1
+```
+
 For a reproducible run, create a RunConfig with the seed, selected device and deterministic flag, then call seed_everything before model construction or rollout.
 
 ## GPU validation
@@ -275,18 +299,18 @@ Use save_checkpoint to atomically write model, optimizer, policy version and RNG
 
 synchronize_policy copies a full state dict from the trainer model to an independent rollout replica and returns a versioned PolicyHandle. It is the correctness-first baseline for rollout and trainer living in separate processes. A production implementation should replace the full copy with a distributed or sharded transport only after preserving the same version contract.
 
-## Hugging Face backend
+## Hugging Face backend (reference extension)
 
 HuggingFaceRolloutWorker is a correctness-first backend: it generates G responses per prompt and recomputes old-policy token logprobs with a causal-LM forward pass. HuggingFaceTrainerWorker repacks prompt plus response, extracts response-token logprobs, and applies masked GRPO with optional reference-policy KL.
 
-To exercise a full-size local model without any script download, supply a complete local Hugging Face snapshot.
+For one end-to-end update with any complete *local* Hugging Face causal-LM
+snapshot, run the generic smoke. Its deterministic reward is only a plumbing
+check; use a real verifier before interpreting a metric as model quality.
 
 ```bash
 PYTHONPATH=. CUDA_VISIBLE_DEVICES=0 \
-python examples/qwen_grpo_smoke.py --model /path/to/complete/model/snapshot
+python examples/hf_grpo_smoke.py --model /path/to/local/model
 ```
-
-The Qwen smoke reward is synthetic and only verifies end-to-end system plumbing. Replace it with a rule verifier or reward model before interpreting learning metrics.
 
 ## Async rollout policy lag
 
