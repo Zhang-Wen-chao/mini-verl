@@ -1,4 +1,4 @@
-# Official verl L20 GRPO smoke — 2026-08-18
+# Official verl L20 GRPO smoke
 
 ## Outcome
 
@@ -7,22 +7,48 @@ optimizer steps on four NVIDIA L20 GPUs. It produced complete FSDP actor and
 optimizer checkpoint shards through `global_step_16`. This confirms the target
 systems path—not model quality—on the L20 host.
 
-The historical launcher did not persist its final exit code. After the last
-checkpoint, the Ray driver remained in cleanup while all GPU resources had
-already been returned; the subsequent audit found no residual task processes.
-The final checkpoint is intact and no OOM, CUDA error, or training traceback was
-found. It is still classified as **systems-smoke complete / quality result
-rejected**, not as a promotion candidate: this historical run lacks the new
-launch-status evidence and its quality metrics are not acceptable. Future runs
-write `logs/exit_status` from the launcher.
+The historical 2026-08-18 launcher did not persist its final exit code. Its final
+checkpoint is intact, but it is retained as historical evidence only. A follow-up
+rerun on 2026-08-19 used the updated launcher, completed all 16 steps, and wrote
+`logs/exit_status = 0`. The clean rerun is the acceptance evidence for the
+official training path. Both runs remain **systems-smoke complete / quality result
+rejected**: their tiny data budget and zero held-out accuracy do not justify a
+4B promotion.
+
+## Clean rerun: 2026-08-19
+
+- Artifact: `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/qwen3-0.6b-gsm8k-grpo-4gpu-smoke-rerun-localenv-20260819T1011`.
+- Launcher result: `logs/exit_status` contains `0`; total wall time reported by
+  official verl was 515.29 seconds.
+- Runtime was the container-local, rebuildable
+  `/tmp/official-verl-local-fsdp-vllm/venv`. Its `UPSTREAM_COMMIT` and `uv.lock`
+  SHA-256 matched the persistent official source before launch, and it imported
+  PyTorch 2.11.0+cu130, Transformers 5.5.3, Ray 2.55.1, vLLM 0.24.0, and verl
+  0.10.0.dev0 with four CUDA GPUs visible.
+- Initial and final held-out GSM8K reward/accuracy@1 were both `0.0` (0/64).
+- Step 16: PPO KL `0.0011808624`; KL loss `0.0008903855`; actor loss
+  `8.903855e-7`; mean response length `230.296875`; response cap ratio `0.84375`;
+  step time `17.4742 s`; throughput `572.3582 tokens/s`.
+- `global_step_16` is complete: two model shards (1,503,446,571 bytes each), two
+  optimizer shards (2,384,226,344 bytes each), rank state, tokenizer/config, and
+  `data.pt` totaling 7,786,812,460 bytes.
+- No traceback, OOM, fatal error, or exception was present in `train.log`.
+
+This rerun proves the updated launcher, pinned runtime, FSDP2 trainer, TP=2 vLLM
+rollout, validation, checkpointing, and clean launcher completion work together.
+It does **not** demonstrate learning quality: rewards and group advantages were
+zero on the observed smoke batches, held-out accuracy remained zero, and 84.375%
+of final-step responses hit the 256-token cap. Raw generated samples were not
+persisted by this run and are a required addition before a quality-oriented 4B
+experiment.
 
 ## Immutable inputs
 
 - Official verl: `c4b389adadc58ce51cb2b63e70df497ca166d77f`
-- Model: `Qwen/Qwen3-0.6B` revision
-  `c1899de289a04d12100db370d81485cdf75e47ca`
-- Model weight: 1,503,300,328 bytes; SHA-256
-  `f47f71177f32bcd101b7573ec9171e6a57f4f4d31148d38e382306f42996874b`
+- Clean-rerun model: `Qwen/Qwen3-0.6B-Base`; `model.safetensors` SHA-256
+  `cd2a512003e2f9f3cd3c32a9c3573f820bb28c940f73c57b1ddaa983d9223eba`.
+- The 2026-08-18 historical run used a separately recorded Qwen3-0.6B snapshot;
+  see `RUNLOG_2026-08-18_qwen3_0.6b_gsm8k_grpo_4gpu_smoke.md` for that identity.
 - Data: OpenAI `grade-school-math` source, converted with the selected
   upstream-compatible GSM8K adapter
 - Train: 256 rows; SHA-256
@@ -43,7 +69,7 @@ write `logs/exit_status` from the launcher.
   the corresponding locked dependency graph (`uv.lock` SHA-256
   `d353bb4ba73fb1089046734044860161050b469430455f4436df1cb916185470`)
 
-## Measured evidence
+## Historical measured evidence: 2026-08-18
 
 - Initial deterministic validation: reward/accuracy `0.015625` (1/64).
 - Step 16 training reward mean: `0.015625` (non-degenerate; min `0`, max `1`).
@@ -67,15 +93,14 @@ quality experiment.
 - Benign platform warnings included unavailable optional Megatron backends, Gloo
   hostname fallback, file-descriptor soft-limit advice, and L20 SM 8.9
   SymmMem unavailability.
-- Ray cleanup retained the driver for several minutes after it had returned all
-  GPU resources. The later audit found no residual task processes. Future runs
-  record the launcher status so this phase is independently auditable.
+- The historical run retained a Ray driver for several minutes after it had
+  returned all GPU resources. The clean rerun's launcher returned status zero.
 
 ## Next gate
 
-Rerun the 0.6B smoke with persisted exit status and save raw samples. Then choose
-a 4B instruct snapshot, recalculate the FSDP/vLLM memory budget, use a longer
-response limit or a task-compatible format, and run a short 4B smoke before any
-longer training. In parallel, map this exact official path into the single-node
-`mini_verl` learning implementation; do not reproduce Ray/FSDP/vLLM orchestration
-inside mini-verl.
+Before considering 4B, add raw-sample persistence and an evaluation setup that
+produces non-degenerate group rewards. Then choose a 4B instruct snapshot,
+recalculate the FSDP/vLLM memory budget, use a task-compatible response limit,
+and run a short 4B smoke. In parallel, map this exact official path into the
+single-node `mini_verl` learning implementation; do not reproduce
+Ray/FSDP/vLLM orchestration inside mini-verl.

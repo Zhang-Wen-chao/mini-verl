@@ -108,9 +108,9 @@ python official_verl/preflight.py \
 It also persists the launcher's numeric exit code in `logs/exit_status`; a
 checkpoint alone is not sufficient evidence that Ray shut down cleanly.
 
-## Observed L20 smoke (2026-08-18)
+## Observed L20 smoke
 
-The first real run completed all 16 planned optimizer steps with the pinned
+The first historical run completed all 16 planned optimizer steps with the pinned
 official source (`c4b389adadc58ce51cb2b63e70df497ca166d77f`), Qwen3-0.6B, 256
 training rows, 64 held-out rows, and the documented 2 FSDP2 + 2 vLLM topology.
 `global_step_16` contains both FSDP model and optimizer shards and the final
@@ -123,9 +123,16 @@ was 1/64 (1.5625%) and the final validation score was 0/64. The tiny data budget
 one epoch, and 256-token response cap are only a systems smoke. Ray's driver
 exited after the last checkpoint with a cleanup-side worker connection error, so
 there is no trustworthy launcher exit status for this first historical run. The
-checkpointed training loop completed, but promotion to 4B requires a clean
-rerun, base/final evaluation, and saved samples. See `SMOKE_RESULT.md` for the
-immutable provenance and exact observed metrics.
+checkpointed training loop completed, but its launcher did not preserve a clean
+exit status.
+
+A follow-up run on 2026-08-19 used the updated launcher and a container-local
+runtime whose upstream commit and `uv.lock` exactly matched the persistent pinned
+source. It completed 16/16 steps, saved `global_step_16`, ran initial and final
+held-out evaluations, and wrote `logs/exit_status = 0`. That is the accepted
+systems proof for this branch. Both baseline and final held-out scores were 0/64,
+so it remains a systems result rather than a learning-quality result. The full
+provenance and exact metrics are in `SMOKE_RESULT.md`.
 The full artifact record is checked in as
 `RUNLOG_2026-08-18_qwen3_0.6b_gsm8k_grpo_4gpu_smoke.md` and copied beside the
 remote checkpoints as `RUNLOG.md`; `RUNLOG_2026-08-18_L20.md` is its compact
@@ -133,7 +140,7 @@ index.
 
 ## Local-disk environment on the L20 host
 
-The initial 4-GPU run was executed from a container-local virtual environment
+The initial 4-GPU runs were executed from a container-local virtual environment
 at `/tmp/official-verl-local-fsdp-vllm`. This is deliberate: unpacking CUDA
 extensions through `uv` on the shared filesystem was very slow. The local
 environment is rebuilt by `bootstrap_local_official_env.sh` from the same pinned
