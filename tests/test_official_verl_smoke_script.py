@@ -7,6 +7,7 @@ OFFICIAL_VERL_DIR = Path(__file__).resolve().parents[1] / "official_verl"
 SCRIPT = OFFICIAL_VERL_DIR / "run_qwen3_0_6b_4gpu_smoke.sh"
 LOCAL_BOOTSTRAP = OFFICIAL_VERL_DIR / "bootstrap_local_official_env.sh"
 WAIT_AND_RUN = OFFICIAL_VERL_DIR / "wait_and_run_qwen3_0_6b_4gpu_smoke.sh"
+CALIBRATION = OFFICIAL_VERL_DIR / "run_qwen3_5_4b_4gpu_calibration.sh"
 
 
 class OfficialVerlSmokeScriptTests(unittest.TestCase):
@@ -40,3 +41,31 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         text = WAIT_AND_RUN.read_text(encoding="utf-8")
         self.assertIn("flock -n", text)
         self.assertIn('("torch", "transformers", "ray", "vllm", "verl")', text)
+
+    def test_4b_calibration_is_bounded_and_persists_generations(self):
+        subprocess.run(["bash", "-n", str(CALIBRATION)], check=True)
+        text = CALIBRATION.read_text(encoding="utf-8")
+        self.assertIn("TRAINING_STEPS=${TRAINING_STEPS:-2}", text)
+        self.assertIn("trainer.total_training_steps=\"$TRAINING_STEPS\"", text)
+        self.assertIn("data.train_batch_size=2", text)
+        self.assertIn("MAX_RESPONSE_LENGTH=${MAX_RESPONSE_LENGTH:-384}", text)
+        self.assertIn("MAX_MODEL_LEN=${MAX_MODEL_LEN:-$((MAX_PROMPT_LENGTH + MAX_RESPONSE_LENGTH))}", text)
+        self.assertIn("data.max_response_length=\"$MAX_RESPONSE_LENGTH\"", text)
+        self.assertIn("data.shuffle=False", text)
+        self.assertIn("+data.apply_chat_template_kwargs.enable_thinking=false", text)
+        self.assertIn("actor_rollout_ref.actor.ppo_mini_batch_size=2", text)
+        self.assertIn("actor_rollout_ref.actor.fsdp_config.offload_policy=True", text)
+        self.assertIn("actor_rollout_ref.actor.fsdp_config.optimizer_offload=True", text)
+        self.assertIn("override_optimizer_config={foreach: false}", text)
+        self.assertIn("actor_rollout_ref.rollout.max_model_len=\"$MAX_MODEL_LEN\"", text)
+        self.assertIn("actor_rollout_ref.rollout.max_num_seqs=32", text)
+        self.assertIn("+actor_rollout_ref.rollout.engine_kwargs.vllm.disable_custom_all_reduce=True", text)
+        self.assertIn("checkpoint_engine.update_weights_bucket_megabytes=3072", text)
+        self.assertIn("MINI_VERL_FORCE_MMAP_WEIGHT_TRANSFER", text)
+        self.assertIn("trainer.rollout_data_dir=", text)
+        self.assertIn("trainer.validation_data_dir=", text)
+        self.assertIn("nvidia-smi --query-compute-apps", text)
+        self.assertIn("PYTHON_BIN", text)
+        self.assertIn("COMPAT_PATH", text)
+        self.assertIn("PYTHONPATH", text)
+        self.assertIn("exit 3", text)
