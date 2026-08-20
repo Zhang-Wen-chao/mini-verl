@@ -173,3 +173,47 @@ DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两�
 3. **GRPO 出处**：DeepSeekMath / DeepSeek-R1 论文 —— 本仓库算法的来源
 4. **DPO 原论文** "Direct Preference Optimization" —— 偏好派代表
 5. 本仓库实战：`run_679_acceptance.md` + `lessons-learned.md`
+
+---
+
+## 9. 面试 Q&A（一问一答速记）
+
+### Q1: GRPO 和 PPO 的区别？
+- PPO 需要**一个额外的 Critic 网络**估计"预期分数"，GRPO **不需要**——用同题生成的 N 个回答的**组内相对分数**替代 Critic。
+- 代价/收益：GRPO 省一个网络（显存减半、更简单稳定），但只能用于**能批量采样、组内可比**的任务（数学/代码对错明确）。
+- PPO 更通用（能处理连续控制、单轨迹场景），GRPO 是"为 LLM 数学/代码 RL 定制"的简化。
+
+### Q2: 什么是 advantage（优势）？
+- **advantage = 实际分数 − 预期分数** = "这次比平时好多少"。
+- PPO 的"预期分数"来自 Critic；GRPO 的"预期分数"来自**组内平均分**。
+- 减掉预期后，只有"超出平时水平"的部分驱动更新，方差小、训练稳。
+
+### Q3: 为什么数学任务用 GRPO？reward 0/1 太稀疏是什么意思？
+- 数学 reward 只有 0（错）/1（对），**绝大多数样本是 0**，绝对信号几乎没有方向。
+- GRPO 的**组内相对比较**把 0/1 变成**连续的相对分**：同一题 4 个回答，
+  advantage = (自己的分 − 组平均) / 组标准差 → 得到 +1.2 / -0.3 / -0.9 这种连续值。
+- 即使**全组都错**（4 个 0 分），相对比较仍能区分"接近对的思路"vs"完全跑题"，
+  梯度方向连续、每步都有信息量 → "信号更密"。
+
+### Q4: kl_coef=0.001 + low_var_kl 是什么意思？
+- KL 惩罚 = 约束"训练后的模型"别偏离"训练前的参考模型"太远（防丢失预训练能力）。
+- `kl_coef=0.001`：`total_loss = policy_loss + 0.001 × KL`，小权重 = 允许改变但别放飞。
+- `low_var_kl`：KL 的一种低方差估计形式 `exp(ref−new) − (ref−new) − 1`，
+  比朴素估计更稳（本仓库 `grpo.py` 用的正是这个公式）。
+- 训练中观测：ppo_kl 稳定在 0.011–0.024，说明约束生效、未发散。
+
+### Q5: 什么是 trajectory / rollout？
+- **rollout** = 模型针对一道题生成的一批回答（采样产物）。
+- **trajectory** = 一条完整记录：prompt + response + old_logprobs + reward + policy_version。
+- 训练时 rollout 采样，trajectory 运输，reward 打分，GRPO 算 advantage，再更新。
+
+### Q6: 什么是 one-step policy lag / rollout 准入？
+- **policy lag**：允许"用旧策略 v_k 采样的 rollout"在训练推进到 v_{k+1} 后再被消费，
+  换取 rollout 与训练**流水线重叠**（不等生成，吞吐↑）。`max_policy_lag=1` 即允许滞后一步。
+- **rollout 准入**：消费前检查轨迹的 policy_version，发现**过期/未知版本直接拒绝**，
+  防止用错策略的样本训练。
+
+### Q7: 你的实验里 KL、advantage、length 各说明了什么？
+- ppo_kl 0.011–0.024 稳定 → 模型没偏离原始能力（KL 约束生效）。
+- advantage 均值在 0 附近摆动 → 组内归一化正常（有正有负才正常）。
+- response_length 138→270+ → 模型在"越写越长"（reward 不惩罚啰嗦，是下一轮要修的坑）。
