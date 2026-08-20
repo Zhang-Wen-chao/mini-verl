@@ -1,20 +1,21 @@
-"""Multi-turn tool-calling GRPO smoke on mini-verl.
+"""Multi-turn tool-calling GRPO on MATH (agent vs plain comparison-ready).
 
-A minimal agentic RL loop: the model may call a calculator tool
-(`[CALC: <expr>]`) before answering; the tool result is appended to the
-conversation and the model generates again (bounded turns). Reward is
-rule-based: 1.0 for a correct final answer AND at least one tool call,
-0.5 for a correct answer without a tool call, 0 otherwise. This trains
-the model to *use the tool* to solve arithmetic problems.
+An agentic RL loop on the 2037-row OpenR1-MATH training set used by the 679-step
+run: the model may call a Python tool (`[PY: <code>]`) before answering; the
+tool output is appended to the conversation and the model generates again
+(bounded turns). Reward is rule-based on the ground-truth answer.
 
-Uses the same Controller/GRPO machinery as hf_grpo_smoke.py; the only new
-piece is ToolAgentRolloutWorker which implements the multi-turn loop.
+Run modes:
+  --tool   : agent loop with Python tool (experimental group)
+  --no-tool: single-turn plain GRPO (control group, mirrors 679 run)
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
+import contextlib
+import io
 import operator
 import re
 
@@ -26,26 +27,47 @@ from mini_verl.hf import HuggingFaceTrainerWorker, PromptExample
 from mini_verl.protocol import Trajectory, TrajectoryBatch, TrajectoryValidationError
 from mini_verl.workers import RuleRewardWorker
 
-CALC_RE = re.compile(r"\[CALC:\s*([^\]]+)\]")
+PY_RE = re.compile(r"\[PY:\s*(.*?)\]", flags=re.DOTALL)
 MAX_TURNS = 3
 
 
-def safe_eval(expr: str) -> str:
-    """Evaluate a simple arithmetic expression safely (no eval of arbitrary code)."""
-    expr = expr.strip()
-    tree = ast.parse(expr, mode="eval")
-    allowed = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant,
-               ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd)
-    for node in ast.walk(tree):
-        if not isinstance(node, allowed):
-            return "error"
+def run_python(code: str) -> str:
+    """Execute a small Python snippet in a restricted namespace and return its stdout."""
+    code = code.strip()
+    if len(code) > 500:
+        return "error: code too long"
+    # AST whitelist: no imports, no attribute access, no calls except builtins math ops.
+    allowed = (ast.Expression, ast.BinOp, ast.UnaryOp, ast.Constant, ast.Name,
+               ast.Add, ast.Sub, ast.Mult, ast.Div, ast.Pow, ast.USub, ast.UAdd,
+               ast.Mod, ast.FloorDiv, ast.Call, ast.Load, ast.List, ast.Tuple,
+               ast.Assign, ast.Expr, ast.Module, ast.Store)
     try:
-        # compile + restricted globals still allows operators via bytecode; the
-        # AST whitelist above is the real gate. literal_eval-based evaluation
-        # would not support operators, so use compile with empty builtins.
-        return str(eval(compile(tree, "<string>", "eval"), {"__builtins__": {}}))
-    except Exception:
-        return "error"
+        tree = ast.parse(code, mode="exec")
+        for node in ast.walk(tree):
+            if not isinstance(node, allowed):
+                return "error: disallowed syntax"
+        ns: dict = {
+            "print": print,
+            "abs": abs,
+            "round": round,
+            "int": int,
+            "float": float,
+            "str": str,
+            "len": len,
+            "range": range,
+            "sum": sum,
+            "min": min,
+            "max": max,
+            "pow": pow,
+            "divmod": divmod,
+        }
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            exec(compile(tree, "<code>", "exec"), ns)
+        out = buf.getvalue().strip()
+        return out if out else "ok"
+    except Exception as e:
+        return f"error: {type(e).__name__}"
 
 
 def parse_final_answer(text: str) -> str:
@@ -65,17 +87,19 @@ def normalize(n: str) -> str:
 
 
 class ToolAgentRolloutWorker:
-    """Multi-turn tool-calling rollout: generate -> parse [CALC:] -> execute ->
-    append tool result to messages -> generate again, until answer or MAX_TURNS.
-    """
+    """Multi-turn rollout: generate -> parse [PY: code] -> execute -> append tool
+    output -> generate again, until answer or MAX_TURNS. In --no-tool mode it
+    degrades to a plain single-turn rollout (control group)."""
 
-    def __init__(self, model, tokenizer, prompts, group_size, max_new_tokens, device="cuda"):
+    def __init__(self, model, tokenizer, prompts, group_size, max_new_tokens,
+                 device="cuda", use_tool=True):
         self.model = model
         self.tokenizer = tokenizer
         self.prompts = prompts
         self.group_size = group_size
         self.max_new_tokens = max_new_tokens
         self.device = device
+        self.use_tool = use_tool
 
     def _generate(self, messages) -> str:
         text = self.tokenizer.apply_chat_template(
@@ -97,21 +121,23 @@ class ToolAgentRolloutWorker:
 
     def _run_episode(self, prompt_text: str) -> tuple[str, list[str]]:
         """Run one multi-turn episode. Returns (final_text, tool_calls)."""
+        if not self.use_tool:
+            return self._generate([{"role": "user", "content": prompt_text}]), []
         messages = [{"role": "user", "content": prompt_text}]
         tool_calls: list[str] = []
         last_text = ""
         for _ in range(MAX_TURNS):
             text = self._generate(messages)
             last_text = text
-            calls = CALC_RE.findall(text)
+            calls = PY_RE.findall(text)
             if not calls:
                 # No tool call requested: this turn's text is the final answer.
                 return text, tool_calls
-            for expr in calls:
-                result = safe_eval(expr)
-                tool_calls.append(expr)
+            for code in calls:
+                result = run_python(code)
+                tool_calls.append(code[:60])
                 messages.append({"role": "assistant", "content": text})
-                messages.append({"role": "tool", "content": f"CALC {expr} = {result}"})
+                messages.append({"role": "tool", "content": f"PY output: {result}"})
         # Exhausted turns: return the last generated text.
         return last_text, tool_calls
 
@@ -141,39 +167,61 @@ class ToolAgentRolloutWorker:
 
 
 def agent_reward(trajectory: Trajectory) -> float:
-    """1.0 correct answer + used tool; 0.5 correct without tool; 0 otherwise."""
+    """1.0 correct answer; 0 otherwise. Tool use is not separately rewarded —
+    correctness is the sole signal (same as the 679 run), so the only difference
+    between groups is tool availability."""
     if trajectory.response_text is None:
         raise TrajectoryValidationError("agent_reward requires response_text")
     expected = trajectory.metadata["expected_answer"]
     answer = parse_final_answer(trajectory.response_text)
-    correct = normalize(answer) == normalize(expected)
-    used_tool = len(trajectory.metadata.get("tool_calls", [])) > 0
-    if correct and used_tool:
-        return 1.0
-    if correct:
-        return 0.5
-    return 0.0
+    return float(normalize(answer) == normalize(expected))
 
 
-PROBLEMS = [
-    ("Compute 17 * 23 and answer with the number after '####'.", "391"),
-    ("Compute 144 / 12 and answer with the number after '####'.", "12"),
-    ("Compute (5 + 7) * 3 and answer with the number after '####'.", "36"),
-]
+def load_math_data(parquet_path: str, limit: int | None = None) -> tuple[PromptExample, ...]:
+    """Load the 2037-row OpenR1-MATH parquet (same as the 679 run) into prompts."""
+    import pyarrow.parquet as pq
+
+    table = pq.read_table(parquet_path)
+    rows = table.to_pylist()
+    if limit is not None:
+        rows = rows[:limit]
+    prompts = []
+    for i, row in enumerate(rows):
+        # prompt is already a list of {role, content} messages.
+        messages = row["prompt"]
+        if isinstance(messages, str):
+            text = messages
+        else:
+            text = "\n".join(f"{m.get('role', 'user')}: {m.get('content', '')}" for m in messages)
+        gt = row.get("reward_model", {}).get("ground_truth", "")
+        prompts.append(
+            PromptExample(
+                text + "\nPut your final answer after '####'.",
+                {
+                    "group_id": f"p{i}",
+                    "expected_answer": str(gt),
+                },
+            )
+        )
+    return tuple(prompts)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", required=True)
-    parser.add_argument("--max-new-tokens", type=int, default=64)
+    parser.add_argument("--data", required=True, help="path to 2037-row MATH parquet")
+    parser.add_argument("--limit", type=int, default=None, help="cap number of prompts")
+    parser.add_argument("--max-new-tokens", type=int, default=128)
     parser.add_argument("--iters", type=int, default=20)
     parser.add_argument("--group-size", type=int, default=4)
     parser.add_argument("--lr", type=float, default=1e-6)
+    parser.add_argument("--no-tool", action="store_true", help="control group: plain single-turn")
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
         raise RuntimeError("agent GRPO smoke requires CUDA")
-    torch.manual_seed(42)
+    torch.manual_seed(args.seed)
 
     tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True)
     if tokenizer.pad_token_id is None:
@@ -183,16 +231,8 @@ def main() -> None:
     ).to("cuda")
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr)
 
-    prompts = tuple(
-        PromptExample(
-            text,
-            {
-                "group_id": f"p{i}",
-                "expected_answer": ans,
-            },
-        )
-        for i, (text, ans) in enumerate(PROBLEMS)
-    )
+    prompts = load_math_data(args.data, args.limit)
+    print(f"loaded {len(prompts)} prompts (tool={'ON' if not args.no_tool else 'OFF'})", flush=True)
 
     rollout = ToolAgentRolloutWorker(
         model=model,
@@ -200,6 +240,7 @@ def main() -> None:
         prompts=prompts,
         group_size=args.group_size,
         max_new_tokens=args.max_new_tokens,
+        use_tool=not args.no_tool,
     )
     controller = Controller(
         rollout_worker=rollout,
