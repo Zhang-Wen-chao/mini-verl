@@ -217,3 +217,59 @@ DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两�
 - ppo_kl 0.011–0.024 稳定 → 模型没偏离原始能力（KL 约束生效）。
 - advantage 均值在 0 附近摆动 → 组内归一化正常（有正有负才正常）。
 - response_length 138→270+ → 模型在"越写越长"（reward 不惩罚啰嗦，是下一轮要修的坑）。
+
+---
+
+## 10. RL 训练框架对比（VeRL / SGLang / Swift / AgentRL）
+
+> 这一节回应简历上的"熟悉 VeRL、Slime、Swift 等框架"。
+> 说明：Slime 是 SGLang 生态里 agentic RL 的框架（sglang 团队），
+> 下面对比时以它为准；如果指别的同名项目，以实际为准。
+
+### 10.1 四个框架一句话定位
+
+| 框架 | 团队 | 一句话定位 | 适用任务 |
+|---|---|---|---|
+| **VeRL** | Bytedance（火山引擎） | 字节开源的 LLM RL 框架，最主流、最完整 | 单轮 RL（数学/代码/通用 RLHF） |
+| **SGLang (Slime)** | LMSYS / sglang 团队 | 高性能推理引擎 + 新出的 agentic RL 框架 | agent RL（多轮工具调用） |
+| **Swift** | 阿里（魔搭 ModelScope） | 一站式 LLM 训练/微调/RL 框架，开箱即用 | RLHF/DPO/GRPO + SFT，偏易用 |
+| **AgentRL** | 清华 + Z.AI | 多轮多任务 agentic RL 框架（AutoGLM 背后） | agent RL（网页/手机/工具） |
+
+### 10.2 详细对比
+
+**VeRL（你实际用的）**
+- 字节开源，PyTorch 生态，支持 FSDP/FSDP2 + vLLM 做 rollout
+- 特点：单轮 RL 事实标准，数学/代码 RL 大量用它（DeepSeek 系复现的首选）
+- 你的实验用的就是它：`verl.experimental.one_step_off_policy.main_ppo` + GRPO
+- 局限：多轮 agent 支持相对弱（1.x 主攻单轮；agent 能力在实验版/社区分支）
+
+**SGLang / Slime**
+- SGLang 是推理引擎（RadixAttention 前缀缓存、连续批），比 vLLM 新、快
+- Slime 是它的 agentic RL 框架：专门做多轮工具调用 RL（浏览器、代码执行）
+- 特点：多轮 rollout 的调度、轨迹存储、环境交互都是原生设计
+
+**Swift**
+- 阿里的"全家桶"：数据准备 → SFT → RLHF/DPO/GRPO → 评测，一条龙
+- 特点：**易用性第一**，配置化、文档全、社区大，适合快速上手/业务落地
+- 性能/灵活性不如 VeRL，但胜在省事
+
+**AgentRL（THUDM）**
+- 清华 + Z.AI，AutoGLM 背后的框架，2025-10 开源
+- 特点：多轮多任务，全异步生成-训练流水线，跨策略采样 + 任务级 advantage 归一化
+- 定位：学术前沿 + 生产 agent 训练
+
+### 10.3 选型速查
+
+| 你的需求 | 选谁 |
+|---|---|
+| 单轮数学/代码 RL，要复现论文 | **VeRL** |
+| 快速上手 RLHF/DPO，不想折腾 | **Swift** |
+| 多轮 agent RL（工具/浏览器） | **SGLang/Slime** 或 **AgentRL** |
+| 多任务 agent RL + 研究前沿 | **AgentRL** |
+
+### 10.4 和你的关系
+
+- 你已经**精通 VeRL**（679 步实战 + 踩坑）
+- 简历"熟悉 PPO/DPO/GRPO"——算法层已覆盖（本文档）
+- 想补"熟悉 Slime/Swift"：最快路径是拿同一份数据各跑一个 smoke
+  （Swift 有现成 GRPO 示例；Slime 用它的 agent 示例），半天能出对比结论
