@@ -273,3 +273,76 @@ DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两�
 - 简历"熟悉 PPO/DPO/GRPO"——算法层已覆盖（本文档）
 - 想补"熟悉 Slime/Swift"：最快路径是拿同一份数据各跑一个 smoke
   （Swift 有现成 GRPO 示例；Slime 用它的 agent 示例），半天能出对比结论
+
+---
+
+## 11. 模型架构：Qwen3.5-4B vs Qwen3-0.6B（本仓库用过的两个模型）
+
+> 面试被问"你用的模型什么架构"时的速答版。
+> 数据来自 L20 上两个模型的实际 config.json。
+
+### 11.1 一表对比
+
+| 维度 | **Qwen3.5-4B**（GRPO 训练用） | **Qwen3-0.6B-Base**（smoke 用） |
+|---|---|---|
+| model_type | qwen3_5（多模态生成） | qwen3（纯文本因果 LM） |
+| 层数 | 32 | 28 |
+| hidden_size | 2560 | 1024 |
+| FFN（SwiGLU） | 9216 | 3072 |
+| 注意力头 / KV 头 | 16 / **4**（GQA） | 16 / **8**（GQA） |
+| head_dim | 256 | 128 |
+| 上下文长度 | **262144（256K）** | 32768（32K） |
+| 注意力类型 | **混合：24 linear + 8 full**（每 4 层 1 full） | 28 层全 full attention |
+| attn_output_gate | ✅ 有 | ❌ 无 |
+| vocab | 248320（含图像/视频 token） | 151936 |
+| tie_word_embeddings | ✅ | ✅ |
+| 实际参数 | ~5.0B | ~0.8B |
+
+### 11.2 核心差异：混合注意力（hybrid linear + full attention）
+
+**Qwen3.5-4B 的最大亮点**是注意力架构：
+
+- 32 层里 **24 层 linear_attention（线性注意力）+ 8 层 full_attention（标准注意力）**，
+  按 `full_attention_interval: 4` 每 4 层插一个 full 层（pattern: L L L F L L L F ...）。
+- **线性注意力**把自注意力从 O(n²) 降到 O(n)，是支持 256K 超长上下文的根本原因。
+- **full 层做"锚点"**：每隔几层用标准注意力做全局信息校正，弥补线性注意力的信息丢失。
+- `attn_output_gate`（输出门控）：对注意力输出再做一个门控，增强表达能力。
+
+这是当前业界"长上下文 + 高效"的主流方向：
+- DeepSeek-V3 的 DSA（DeepSeek Sparse Attention）也是"稀疏/混合注意力"路线；
+- Qwen3.5 用 24:8 的混合比例，比纯线性（如 Mamba 系）保留更好的全局建模，比全注意力省显存/算力。
+
+**面试可讲的一句话**：
+> "Qwen3.5-4B 是混合注意力架构，32 层里 24 层线性注意力 + 8 层全注意力（每 4 层一个 full），
+> 线性注意力把复杂度从 O(n²) 降到 O(n)，所以能支持 256K 上下文；full 层作为全局锚点弥补信息丢失，
+> 类似 DeepSeek-V3 DSA 的思路。"
+
+### 11.3 GQA（分组查询注意力）——两个模型都有
+
+- **GQA = Grouped Query Attention**：多个 query 头共享一组 KV 头。
+  - Qwen3.5-4B：16 query / 4 KV（4:1 分组）
+  - Qwen3-0.6B：16 query / 8 KV（2:1 分组）
+- **为什么用 GQA**：KV cache 显存随 KV 头数量线性增长，GQA 砍掉大部分 KV 头，
+  推理显存和带宽都省，效果损失很小（业界标准，Llama 3 / Mistral 都用）。
+- 面试："我的模型用 GQA，4B 是 16 query 共享 4 个 KV 头，KV cache 省 4 倍。"
+
+### 11.4 参数口径：4B 不是 4B
+
+- Qwen3.5-4B 实际 ~**5.0B** 参数（含 embedding），命名是营销口径。
+- Qwen3-0.6B 实际 ~**0.8B**。
+- 且都 `tie_word_embeddings=True`（输入/输出 embedding 共享），省一大块参数。
+- 面试：主动提"叫 4B 实际 5.0B，因为 tie embedding"显专业。
+
+### 11.5 多模态 vs 纯文本
+
+- Qwen3.5-4B 是 `Qwen3_5ForConditionalGeneration`，config 里有
+  `image_token_id` / `video_token_id` / `vision_start/end_token_id`——**支持图像和视频输入**。
+  你 GRPO 只用它的文本分支，但模型本身是多模态。
+- Qwen3-0.6B 是 `Qwen3ForCausalLM`，纯文本。
+
+### 11.6 和 RL 实验的关系（面试可能追问）
+
+- Qwen3.5-4B 训练时 `max_response_length=384` token，**远没吃满 256K 上下文**——长上下文优势在短回答场景用不上。
+- 但混合注意力在 4B 级别提供了强推理基础，且 GRPO 下收敛稳定（你的 679 步实验验证了这点）。
+- 如果面试官问"为什么不用更大的模型"：L20 是 48GB×4 卡，4B + FSDP2 + vLLM 是显存和吞吐的平衡点；
+  更大模型（7B+）单卡放不下，多卡通信又受 PCIe 限制（L20 无 NVLink）。
