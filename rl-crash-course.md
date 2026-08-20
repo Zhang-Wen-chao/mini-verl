@@ -54,17 +54,20 @@ SFT 需要有人写好答案（上限=人类水平）；RL 只要有个打分函
 
 这一派的关键问题是：**分数有噪声、有尺度问题**。所以演化出一堆改进：
 
-#### 3.1 REINFORCE（最原始）
-- 采一条轨迹 → 看总分 → 正分往上推，负分往下压
+### 3.1 REINFORCE（最原始）
+- **全称**：REward Increment = Nonnegative Factor × Offset Reinforcement × Characteristic Eligibility（Williams, 1992）。这是个"为了凑首字母缩写"的名字，实际就是**最朴素的策略梯度（vanilla policy gradient）**。
+- 做法：采一条轨迹 → 看总分 → 正分往上推，负分往下压
 - 缺点：方差巨大（同一题做两次，一次对一次错，梯度方向相反）
 
 #### 3.2 PPO（近端策略优化）—— 工业标准
+- **全称**：**Proximal Policy Optimization**（OpenAI, Schulman et al., 2017）
 - 改进 1：**用新旧策略的概率比**，限制单次更新别太大（clip），训练稳定
 - 改进 2：**引入 Critic（价值网络）**，估计"这个状态本来该得多少分"，
   用 **Advantage = 实际分数 − 预期分数** 作为更新信号
 - 缺点：**要额外训一个 Critic 网络**，显存翻倍、训练不稳
 
 #### 3.3 GRPO（群组相对策略优化）—— 本仓库用的
+- **全称**：**Group Relative Policy Optimization**（DeepSeekMath, Shao et al., 2024）
 - **去掉 Critic**：让模型对同一道题生成 N 个回答（如 4 个）
 - 用这 N 个回答的**组内相对分数**替代 Critic 的"预期分数"
 - **Advantage = (自己的分数 − 组平均) / 组标准差**
@@ -81,9 +84,9 @@ SFT 需要有人写好答案（上限=人类水平）；RL 只要有个打分函
 
 | 算法 | 核心思想 | 一句话 |
 |---|---|---|
-| **RLHF (PPO)** | 先训 Reward Model（打分器），再 PPO 优化 | 人类喜好 → 学一个分 → 当分数用 |
-| **DPO** | 跳过 Reward Model，直接用偏好对优化 | "这个好那个差"直接指导更新 |
-| **KTO** | 只用"好不好"（单样本），不用成对 | 更省数据 |
+| **RLHF (PPO)** | **Reinforcement Learning from Human Feedback**：先训 Reward Model（打分器），再 PPO 优化 | 人类喜好 → 学一个分 → 当分数用 |
+| **DPO** | **Direct Preference Optimization**（Rafailov et al., 2023）：跳过 Reward Model，直接用偏好对优化 | "这个好那个差"直接指导更新 |
+| **KTO** | **Kahneman-Tversky Optimization**：只用"好不好"（单样本），不用成对 | 更省数据 |
 
 **为什么会有 DPO？** RLHF 管线重（要训 RM + PPO 两个阶段）。
 DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两个回答的 log 概率差**就能更新，
