@@ -1,4 +1,28 @@
-# Official verl: first GRPO run
+# official_verl：官方训练实验资产
+
+这里保存的是**官方 `verl` 实验的可执行资产**：数据转换、preflight、启动脚本和与它们
+对应的归档证据。它不是当前项目状态或 roadmap 的入口；请先读
+[项目状态与路线图](../docs/project-status.md)。
+
+## 当前结论与入口
+
+| 你想找什么 | 去哪里 |
+|---|---|
+| 当前项目状态、下一步 | [项目状态与路线图](../docs/project-status.md) |
+| 4B 正式实验的结果 | [Qwen3.5-4B / 679-step 结果](../docs/results/qwen3.5-4b-grpo-679-step.md) |
+| 4B 的历史设计、显存与奖励排障 | [历史计划](docs/history/qwen3.5-4b-grpo-plan-2026-08-19.md)、[奖励诊断 runlog](docs/runlogs/2026-08-19-qwen3.5-4b-reward-diagnosis.md) |
+| 0.6B 系统 smoke 结果 | [0.6B smoke](docs/results/qwen3-0.6b-gsm8k-smoke.md) |
+| 每次实验的记录模板 | [runlog 模板](docs/templates/runlog-template.md) |
+
+正式 4B run 使用官方 `one_step_off_policy` 路径：3 张 FSDP2 trainer GPU + 1 张 vLLM
+rollout GPU，下一批 rollout 与当前 batch 更新异步重叠，最多一代 policy lag。
+
+---
+
+## 历史实施指南：第一个官方 GRPO smoke
+
+以下内容保留为 0.6B 系统 smoke 的复现说明和接口约束。它证明官方训练链路可运行，
+但**不是**当前 4B 质量结论，也不是下一步计划。
 
 This directory makes the first **official** verl experiment reproducible without
 vendoring a second copy of upstream. It deliberately owns the stable experiment
@@ -132,11 +156,11 @@ source. It completed 16/16 steps, saved `global_step_16`, ran initial and final
 held-out evaluations, and wrote `logs/exit_status = 0`. That is the accepted
 systems proof for this branch. Both baseline and final held-out scores were 0/64,
 so it remains a systems result rather than a learning-quality result. The full
-provenance and exact metrics are in `SMOKE_RESULT.md`.
+provenance and exact metrics are in [0.6B smoke result](docs/results/qwen3-0.6b-gsm8k-smoke.md).
 The full artifact record is checked in as
-`RUNLOG_2026-08-18_qwen3_0.6b_gsm8k_grpo_4gpu_smoke.md` and copied beside the
-remote checkpoints as `RUNLOG.md`; `RUNLOG_2026-08-18_L20.md` is its compact
-index.
+[2026-08-18 Qwen3-0.6B smoke runlog](docs/runlogs/2026-08-18-qwen3-0.6b-gsm8k-smoke.md)
+and copied beside the remote checkpoints as `RUNLOG.md`; the
+[L20 smoke index](docs/runlogs/2026-08-18-l20-smoke-index.md) is its compact index.
 
 ## Local-disk environment on the L20 host
 

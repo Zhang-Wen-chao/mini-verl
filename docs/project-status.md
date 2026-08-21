@@ -6,7 +6,9 @@
 
 这个分支已经不只是“计划做一个 GRPO 框架”：它同时完成了一个可验证的最小 GRPO
 实现，以及一次官方 `verl` 上的 Qwen3.5-4B 真实训练。最强证据是独立 MATH held-out
-200 题从 **5/200（2.5%）** 到 **17/200（8.5%）**，即 **3.4×**。
+200 题的对照结果是：**未做 GRPO 强化训练的原始 Qwen3.5-4B base checkpoint** 为
+**5/200（2.5%）**；**679-step GRPO checkpoint** 为 **17/200（8.5%）**，即
+**绝对 +6.0 个百分点**、相对 **3.4×**。这 200 题只用于前后评测，不参与更新。
 
 这说明当前训练契约在该固定模型、数据、奖励、算力和评测协议下有效；它不是对所有
 数学任务、所有模型或更大训练规模的泛化承诺。
@@ -27,10 +29,10 @@ Qwen3.5-4B：校准奖励、解决 2+2 拓扑 OOM、验证 3+1 拓扑
 
 | 层级 | 状态 | 做成了什么 | 应该读什么 |
 |---|---|---|---|
-| 最小框架 `mini_verl/` | 已完成核心闭环 | trajectory 契约、GRPO + KL、HF rollout/trainer、策略同步、checkpoint、DDP smoke、长度调度与性能观测 | [README：框架进度](README.md#mini-verl-实现进度框架层)、[RUNBOOK](RUNBOOK.md) |
-| 官方训练系统 `official_verl/` | 已完成 | 锁定官方 `verl`、FSDP2 + vLLM、preflight、数据转换、规则奖励、checkpoint 与 clean exit | [official_verl/README](official_verl/README.md)、[0.6B smoke](official_verl/SMOKE_RESULT.md) |
-| 4B 训练质量 | 已完成第一条有效实验 | Qwen3.5-4B、2037 训练题、679 step、4×L20、独立 held-out 正向提升 | [679-step 验收](run_679_acceptance.md) |
-| 评测与实验可靠性 | 已识别并修复关键问题 | 训练/评测去重、答案格式归一化、逐题落盘、单题超时、评测回落诊断 | [回落分析](analysis_regression_510_vs_679.md)、[经验记录](lessons-learned.md) |
+| 最小框架 `mini_verl/` | 已完成核心闭环 | trajectory 契约、GRPO + KL、HF rollout/trainer、策略同步、checkpoint、DDP smoke、长度调度与性能观测 | [框架架构与实现进度](architecture/mini-verl-architecture.md)、[运行指南](guides/runbook.md) |
+| 官方训练系统 `official_verl/` | 已完成 | 锁定官方 `verl`、FSDP2 + vLLM、preflight、数据转换、规则奖励、checkpoint 与 clean exit | [官方实验资产索引](../official_verl/README.md)、[0.6B 系统 smoke](../official_verl/docs/results/qwen3-0.6b-gsm8k-smoke.md) |
+| 4B 训练质量 | 已完成第一条有效实验 | Qwen3.5-4B、2037 训练题、679 step、4×L20、独立 held-out 正向提升 | [679-step 结果](results/qwen3.5-4b-grpo-679-step.md) |
+| 评测与实验可靠性 | 已识别并修复关键问题 | 训练/评测去重、答案格式归一化、逐题落盘、单题超时、评测回落诊断 | [回落分析](results/step-510-to-679-regression-analysis.md)、[经验记录](operations/l20-lessons-learned.md) |
 
 ## 当前最值得展示的亮点
 
@@ -38,10 +40,10 @@ Qwen3.5-4B：校准奖励、解决 2+2 拓扑 OOM、验证 3+1 拓扑
 
 | 实验 | 训练 | 评测 | 结果 | 结论 |
 |---|---|---|---|---|
-| Qwen3.5-4B GRPO 正式 run | OpenR1-Math 过滤后 2037 题；679 step；4×L20 | MATH-lighteval test 随机 200 题；训练未见；base/final 同 prompt、greedy 与归一化评分 | base 5/200（2.5%）→ 679 17/200（8.5%） | **3.4×**，可作为“该训练设置产生 held-out 改善”的证据 |
-| 训练中监控 | 同上 | 64 题、训练集零重叠 | 42/64 → 最高 56/64；最终原始评分 53/64，人工确认约 55/64 | 验证训练中存在信号；最终结论仍以独立 200 题为主 |
+| Qwen3.5-4B GRPO 正式 run | OpenR1-Math 过滤后 2037 题；679 step；4×L20 | MATH-lighteval test 随机 200 题；训练未见；**未做 GRPO 的 base** 与 **679-step checkpoint** 使用同 prompt、greedy 和归一化评分 | 未做 GRPO：5/200（2.5%）→ GRPO 679 step：17/200（8.5%） | **+6.0pp、3.4×**，可作为“该训练设置产生 held-out 改善”的证据 |
+| 训练中固定监控 | 同上 | 64 题、训练集零重叠；在训练中定期评测 | base 42/64（65.6%）→ step 510 最高 56/64（87.5%），**+21.9pp**；step 679 原始 53/64，复核约 55/64 | 证明训练中存在强学习信号；因被反复评测，最终泛化结论仍以独立 200 题为主 |
 
-完整配置、checkpoint、评测节点、训练信号和边界见 [run_679_acceptance.md](run_679_acceptance.md)。
+完整配置、checkpoint、评测节点、训练信号和边界见 [679-step 结果](results/qwen3.5-4b-grpo-679-step.md)。
 
 ### 2. 对失败和负结果也留了证据
 
@@ -64,22 +66,12 @@ rollout → trajectory / old logprob → reward → group advantage
 这使得算法正确性、策略陈旧性、padding、长度准入、checkpoint 和 rollout/train
 重叠可以分别验证，而不是都隐藏在一次大规模训练里。
 
-## 目录导航
+## 读什么，不读什么
 
-```text
-README.md                         # 首页：成果、入口、框架进度
-PROJECT_STATUS.md                 # 当前状态、亮点、边界、下一步（本文件）
-run_679_acceptance.md             # 4B 正式 run 的核心验收证据
-analysis_regression_510_vs_679.md # 训练中评测回落的逐题诊断
-lessons-learned.md                # 真实训练与评测踩坑
-rl-crash-course.md                # PPO / GRPO / DPO 等算法直觉
-RUNBOOK.md                        # 本地与 GPU 验证命令
-PERFORMANCE_REPORT.md             # mini 框架的性能实验原始解释
-mini_verl/                        # 最小 GRPO 实现
-tests/                            # 契约、正确性、集成与脚本测试
-benchmarks/                       # toy / HF / pipeline 性能对照
-official_verl/                    # 官方 verl 的可复现实验契约、脚本与运行记录
-```
+- 想看**现在和下一步**：只读本页。
+- 想看**最终实验结论**：读 [679-step 结果](results/qwen3.5-4b-grpo-679-step.md)。
+- 想看**历史排障过程**：从 [官方实验资产索引](../official_verl/README.md) 进入 `docs/history/` 或 `docs/runlogs/`。这些是证据归档，**不是当前 roadmap**。
+- 想看完整文档分类：读 [文档导航](README.md)。
 
 ## 当前边界：哪些还没有做
 

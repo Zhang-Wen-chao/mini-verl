@@ -3,7 +3,8 @@
 > **历史计划说明（2026-08-21 更新）**：以下主体记录的是 2026-08-19 进入正式短训前的
 > 决策、门槛和排障过程。该计划所指的 2,048 行短训随后已完成为 679-step 正式 run；
 > 其独立 MATH held-out 结果为 2.5% → 8.5%（3.4×）。当前结论与后续工作请优先看
-> [项目状态](../PROJECT_STATUS.md) 和 [679-step 验收](../run_679_acceptance.md)。
+> [项目状态](../../../docs/project-status.md) 和
+> [679-step 结果](../../../docs/results/qwen3.5-4b-grpo-679-step.md)。
 
 历史状态：**官方 4-GPU 训练链路、单步有效 GRPO 更新与 3+1 两步稳定性均已验收；
 当时尚未进入 2,048/10k 短训。**
@@ -12,7 +13,8 @@
 > 给 GRPO 产生可用的组内差异。冻结的真实 OpenR1 rollout 证明“最多三句短解答
 > + `\boxed{}`、thinking off、384 response token”在固定题组上产生了
 > `[0,0,0,1]`。这只是可进入**一条**官方 GRPO 校准的必要条件，不是训练质量
-> 结论。完整证据见 `RUNLOG_2026-08-19_qwen3_5_4b_reward_diagnosis.md`。
+> 结论。完整证据见
+> [2026-08-19 奖励诊断 runlog](../runlogs/2026-08-19-qwen3.5-4b-reward-diagnosis.md)。
 
 这份计划承接已完成的 Qwen3-0.6B 官方 verl 系统 smoke。那次运行已经验证
 了官方 `verl`、FSDP2、TP=2 vLLM、GSM8K 规则奖励、checkpoint 和 clean exit

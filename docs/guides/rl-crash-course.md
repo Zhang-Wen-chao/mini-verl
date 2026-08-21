@@ -72,6 +72,7 @@ SFT 需要有人写好答案（上限=人类水平）；RL 只要有个打分函
 - **去掉 Critic**：让模型对同一道题生成 N 个回答（如 4 个）
 - 用这 N 个回答的**组内相对分数**替代 Critic 的"预期分数"
 - **Advantage = (自己的分数 − 组平均) / 组标准差**
+- **不是把 PPO 全盘换掉**：GRPO 换掉的是"Critic 计算 advantage"这一步；策略更新仍沿用 PPO 风格的"新旧概率比 + clip"，限制一次更新别偏离旧策略太远。
 - 好处：省一个网络、更稳、天然适合"对错明确"的任务（数学/代码）
 
 > **为什么 GRPO 适合数学？** 数学题 reward 是"答案对不对"，绝对分数 0/1 太稀疏。
@@ -145,7 +146,7 @@ DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两�
 | **KL 崩溃** | 模型偏离原始能力 | 用 `kl_loss_coef=0.001` + `low_var_kl` 约束 |
 | **长度膨胀** | 模型学会啰嗦（reward 不惩罚） | response_length 138→270+，逼近 384 上限 |
 | **过拟合训练集** | 背题不泛化 | 2037 题太小，需扩到 10000 + held-out 验证 |
-| **解码死循环** | greedy 生成卡死 | 评测脚本加超时（见 lessons-learned.md） |
+| **解码死循环** | greedy 生成卡死 | 评测脚本加超时（见 [L20 实验经验](../operations/l20-lessons-learned.md)） |
 
 **RL 的黄金法则：reward 定义了什么，模型就优化什么。**
 你 reward 只查"答案对不对"，模型就会钻格式空子、会堆字数；
@@ -176,7 +177,7 @@ DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两�
 2. **PPO 原论文** "Proximal Policy Optimization Algorithms" —— 工业标准
 3. **GRPO 出处**：DeepSeekMath / DeepSeek-R1 论文 —— 本仓库算法的来源
 4. **DPO 原论文** "Direct Preference Optimization" —— 偏好派代表
-5. 本仓库实战：`run_679_acceptance.md` + `lessons-learned.md`
+5. 本仓库实战：[679-step 结果](../results/qwen3.5-4b-grpo-679-step.md) + [L20 实验经验](../operations/l20-lessons-learned.md)
 
 ---
 
@@ -184,6 +185,7 @@ DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两�
 
 ### Q1: GRPO 和 PPO 的区别？
 - PPO 需要**一个额外的 Critic 网络**估计"预期分数"，GRPO **不需要**——用同题生成的 N 个回答的**组内相对分数**替代 Critic。
+- 两者都要防止策略一次改太猛：都可使用 PPO 风格的**新旧概率比 + clip**。因此 GRPO 的关键不是"不用 PPO 的稳定更新"，而是"不用 PPO 的 Critic 来算 advantage"。
 - 代价/收益：GRPO 省一个网络（显存减半、更简单稳定），但只能用于**能批量采样、组内可比**的任务（数学/代码对错明确）。
 - PPO 更通用（能处理连续控制、单轨迹场景），GRPO 是"为 LLM 数学/代码 RL 定制"的简化。
 

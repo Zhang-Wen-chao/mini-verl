@@ -48,7 +48,8 @@ experiment.
 - Clean-rerun model: `Qwen/Qwen3-0.6B-Base`; `model.safetensors` SHA-256
   `cd2a512003e2f9f3cd3c32a9c3573f820bb28c940f73c57b1ddaa983d9223eba`.
 - The 2026-08-18 historical run used a separately recorded Qwen3-0.6B snapshot;
-  see `RUNLOG_2026-08-18_qwen3_0.6b_gsm8k_grpo_4gpu_smoke.md` for that identity.
+  see the [historical smoke runlog](../runlogs/2026-08-18-qwen3-0.6b-gsm8k-smoke.md)
+  for that identity.
 - Data: OpenAI `grade-school-math` source, converted with the selected
   upstream-compatible GSM8K adapter
 - Train: 256 rows; SHA-256
