@@ -61,6 +61,7 @@ SFT 需要有人写好答案（上限=人类水平）；RL 只要有个打分函
 
 #### 3.2 PPO（近端策略优化）—— 工业标准
 - **全称**：**Proximal Policy Optimization**（OpenAI, Schulman et al., 2017）
+- **“近端”是什么意思？** 每轮更新后的**新策略要靠近旧策略**：对已采样回答的生成概率不能一下子相对变化太大。PPO 用新旧策略的概率比 `ratio = 新概率 / 旧概率`，并用 clip 把有效变化限制在小范围（常见为 `0.8 ~ 1.2`）。这不是说模型参数在几何空间里一定很近，而是说**行为概率别突然变样**，避免被一批有噪声的 reward 带偏。
 - 改进 1：**用新旧策略的概率比**，限制单次更新别太大（clip），训练稳定
 - 改进 2：**引入 Critic（价值网络）**，估计"这个状态本来该得多少分"，
   用 **Advantage = 实际分数 − 预期分数** 作为更新信号
@@ -84,7 +85,7 @@ SFT 需要有人写好答案（上限=人类水平）；RL 只要有个打分函
 
 | 算法 | 核心思想 | 一句话 |
 |---|---|---|
-| **RLHF (PPO)** | **Reinforcement Learning from Human Feedback**：先训 Reward Model（打分器），再 PPO 优化 | 人类喜好 → 学一个分 → 当分数用 |
+| **RLHF + PPO** | **RLHF（Reinforcement Learning from Human Feedback）**：先根据人类偏好训练 Reward Model（打分器），再用 **PPO（Proximal Policy Optimization，近端策略优化）** 更新语言模型 | 人类喜好 → 学一个分 → PPO 稳定地让模型更偏向高分回答 |
 | **DPO** | **Direct Preference Optimization**（Rafailov et al., 2023）：跳过 Reward Model，直接用偏好对优化 | "这个好那个差"直接指导更新 |
 | **KTO** | **Kahneman-Tversky Optimization**：只用"好不好"（单样本），不用成对 | 更省数据 |
 
