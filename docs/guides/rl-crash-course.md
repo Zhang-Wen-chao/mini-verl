@@ -214,10 +214,27 @@ DPO 发现：RM + PPO 的组合其实可以闭式解出来，**直接比较两�
 - 训练时 rollout 采样，trajectory 运输，reward 打分，GRPO 算 advantage，再更新。
 
 ### Q6: 什么是 one-step policy lag / rollout 准入？
+- **本仓库的正式 4B verl run**：是“训练当前 batch 时，异步生成下一 batch”的
+  **one-step-overlap 受控异步流水线**，不是全同步的 rollout → train → rollout 串行循环。
+  训练和下一批 rollout 重叠，但下一批最多滞后一代 policy，因此不是无约束异步。
 - **policy lag**：允许"用旧策略 v_k 采样的 rollout"在训练推进到 v_{k+1} 后再被消费，
   换取 rollout 与训练**流水线重叠**（不等生成，吞吐↑）。`max_policy_lag=1` 即允许滞后一步。
 - **rollout 准入**：消费前检查轨迹的 policy_version，发现**过期/未知版本直接拒绝**，
   防止用错策略的样本训练。
+
+### Q6b: 同步与异步训练各有什么好处？
+
+**同步**是严格串行：`生成 batch k → 打分 → 训练 batch k → 同步权重 → 生成 batch k+1`。
+它的优点是样本一定来自最新策略，语义简单、容易调试和复现；缺点是 rollout GPU 与 trainer
+GPU 会轮流空闲，单轮耗时接近“生成时间 + 训练时间”。
+
+**异步**让 trainer 训练 batch k 的同时，rollout GPU 生成 batch k+1。优点是两类 GPU
+可以重叠工作，单轮耗时更接近两者中较慢的一项，吞吐更高；代价是下一批样本可能由旧策略
+生成。若样本滞后很多代，当前策略与采样策略相差过大，更新可能不稳，同时还要处理版本检查、
+权重同步和故障恢复。
+
+因此本项目选择**最多一代滞后的受控异步**：比全同步更充分利用 GPU，又用
+`max_policy_lag=1` 限制旧样本，避免无约束异步的陈旧样本风险。
 
 ### Q7: 你的实验里 KL、advantage、length 各说明了什么？
 - ppo_kl 0.011–0.024 稳定 → 模型没偏离原始能力（KL 约束生效）。

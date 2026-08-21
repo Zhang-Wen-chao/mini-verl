@@ -18,6 +18,15 @@
 | 起止 | 2026-08-19 19:19 → 2026-08-20 12:52（约 17.5h） |
 | 每步耗时 | 84–108s，吞吐 11–18 tok/s |
 
+### 训练与 rollout 的同步方式
+
+这次正式 run 不是严格的“rollout 完成 → 训练完成 → 再 rollout”的全同步模式，而是
+**one-step-overlap 的受控异步流水线**：3 张 actor GPU 训练当前 batch 时，第 4 张 vLLM
+rollout GPU 同时异步生成下一 batch。下一批 trajectory 最多来自前一个 policy 版本（最多一代
+policy lag）；系统会在消费前同步 rollout 权重并限制这种滞后。
+
+一句话：**训练和下一批 rollout 异步重叠；但策略最多允许一代滞后，因此是受控异步，而非无约束异步。**
+
 ## 2. 训练中监控评测（固定 64 题，与训练集零重叠）
 
 | step | accuracy@1 | 相对 step 0 |
