@@ -80,6 +80,26 @@ class OfficialVerlPreflightTests(unittest.TestCase):
         self.assertNotIn("runtime_dependencies", optional["hard_failures"])
         self.assertIn("runtime_dependencies", required["hard_failures"])
 
+    def test_require_cuda_rejects_driver_incompatible_torch_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            (repo / "UPSTREAM_COMMIT").write_text(("c" * 40) + "\n", encoding="utf-8")
+            (repo / "config.yaml").write_text("algorithm: grpo\n", encoding="utf-8")
+            original_cuda = preflight.cuda_profile
+            try:
+                preflight.cuda_profile = lambda: {
+                    "nvidia_smi": True,
+                    "query_ok": True,
+                    "gpus": ["NVIDIA L20"],
+                    "torch_cuda": {"is_available": False, "device_count": 0},
+                }
+                report = preflight.build_report(repo, require_cuda=True)
+            finally:
+                preflight.cuda_profile = original_cuda
+        self.assertTrue(report["checks"]["cuda_visible"])
+        self.assertFalse(report["checks"]["cuda_runtime_available"])
+        self.assertIn("cuda_runtime_available", report["hard_failures"])
+
 
 if __name__ == "__main__":
     unittest.main()

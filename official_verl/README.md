@@ -129,6 +129,10 @@ python official_verl/preflight.py \
 
 `run_qwen3_0_6b_4gpu_smoke.sh` repeats this locked preflight with the exact
 `python` that will launch the job, before it calls the official entrypoint.
+When `--require-cuda` is set, preflight requires both `nvidia-smi` visibility
+and a successful `torch.cuda.is_available()` / device-count probe in a child
+process. This catches a CUDA wheel that is newer than the host driver before
+Ray has started workers or NCCL emits the less actionable `no GPUs found`.
 It also persists the launcher's numeric exit code in `logs/exit_status`; a
 checkpoint alone is not sufficient evidence that Ray shut down cleanly.
 

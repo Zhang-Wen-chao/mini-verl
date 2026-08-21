@@ -76,6 +76,45 @@ def cuda_profile() -> dict[str, Any]:
     )
     profile["query_ok"] = status == 0
     profile["gpus"] = output.splitlines() if status == 0 else []
+
+    # Seeing a device in nvidia-smi is not sufficient to launch a distributed
+    # PyTorch job.  The selected wheel can require a newer CUDA driver, in
+    # which case Ray workers see zero CUDA devices and NCCL fails later.  Keep
+    # this in a child process so a broken CUDA initialization cannot poison the
+    # preflight process itself.  It deliberately constructs no model and
+    # allocates no tensor.
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import json, torch; "
+                "print(json.dumps({'torch': torch.__version__, "
+                "'torch_cuda': torch.version.cuda, "
+                "'is_available': torch.cuda.is_available(), "
+                "'device_count': torch.cuda.device_count()}))"
+            ),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if probe.returncode == 0:
+        try:
+            profile["torch_cuda"] = json.loads(probe.stdout)
+        except json.JSONDecodeError:
+            profile["torch_cuda"] = {
+                "is_available": False,
+                "device_count": 0,
+                "error": "CUDA probe returned invalid JSON",
+            }
+    else:
+        lines = (probe.stderr or probe.stdout).strip().splitlines()
+        profile["torch_cuda"] = {
+            "is_available": False,
+            "device_count": 0,
+            "error": lines[-1] if lines else f"CUDA probe exited with status {probe.returncode}",
+        }
     return profile
 
 
@@ -137,6 +176,8 @@ def build_report(
         "verl_revision": revision is not None,
         "upstream_grpo_evidence": bool(grpo_files),
         "cuda_visible": bool(cuda.get("query_ok")),
+        "cuda_runtime_available": bool(cuda.get("torch_cuda", {}).get("is_available"))
+        and int(cuda.get("torch_cuda", {}).get("device_count", 0)) > 0,
         "runtime_dependencies": runtime_available(runtime),
     }
     hard_failures = [
@@ -152,6 +193,8 @@ def build_report(
     ]
     if require_cuda and not checks["cuda_visible"]:
         hard_failures.append("cuda_visible")
+    if require_cuda and not checks["cuda_runtime_available"]:
+        hard_failures.append("cuda_runtime_available")
     if require_runtime and not checks["runtime_dependencies"]:
         hard_failures.append("runtime_dependencies")
     return {
@@ -181,7 +224,11 @@ def lock_matches(lock_path: Path, report: dict[str, Any]) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verl-dir", type=Path, required=True, help="Pinned checkout of github.com/volcengine/verl")
-    parser.add_argument("--require-cuda", action="store_true", help="Fail if nvidia-smi cannot see a GPU")
+    parser.add_argument(
+        "--require-cuda",
+        action="store_true",
+        help="Fail unless nvidia-smi and this PyTorch runtime can initialize CUDA",
+    )
     parser.add_argument(
         "--require-runtime",
         action="store_true",
