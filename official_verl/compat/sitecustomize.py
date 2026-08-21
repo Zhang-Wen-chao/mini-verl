@@ -23,8 +23,10 @@ _ONE_STEP_MODULE = "verl.experimental.one_step_off_policy.ray_trainer"
 _WORKER_MODULE = "verl.single_controller.base.worker"
 _VLLM_ROLLOUT_MODULE = "verl.workers.rollout.vllm_rollout.vllm_rollout"
 _BUCKET_TRANSFER_MODULE = "verl.workers.rollout.vllm_rollout.bucketed_weight_transfer"
+_MATH_REWARD_MODULE = "verl.utils.reward_score.math_reward"
 _MMAP_TRANSFER_ENV = "MINI_VERL_FORCE_MMAP_WEIGHT_TRANSFER"
 _MMAP_TRANSFER_DIR_ENV = "MINI_VERL_WEIGHT_TRANSFER_MMAP_DIR"
+_MATH_REWARD_MODE_ENV = "MINI_VERL_MATH_REWARD_MODE"
 
 
 def _patch_one_step_module(module) -> None:
@@ -209,6 +211,24 @@ def _patch_vllm_rollout_module(module) -> None:
     module._mini_verl_force_mmap_transfer_patch = True
 
 
+def _patch_math_reward_module(module) -> None:
+    """Opt in to exact rational equivalence without modifying pinned VeRL."""
+    if os.environ.get(_MATH_REWARD_MODE_ENV) != "normalized":
+        return
+    if getattr(module, "_mini_verl_normalized_math_reward_patch", False):
+        return
+    from normalized_math_reward import compute_score as normalized_compute_score
+
+    legacy_compute_score = module.compute_score
+
+    @functools.wraps(legacy_compute_score)
+    def compute_score_with_exact_rationals(solution_str, ground_truth):
+        return normalized_compute_score(solution_str, ground_truth, legacy_compute_score)
+
+    module.compute_score = compute_score_with_exact_rationals
+    module._mini_verl_normalized_math_reward_patch = True
+
+
 class _PatchLoader(importlib.abc.Loader):
     def __init__(self, wrapped_loader, patch):
         self._wrapped_loader = wrapped_loader
@@ -229,6 +249,7 @@ class _VerlPatchFinder(importlib.abc.MetaPathFinder):
         _WORKER_MODULE: _patch_worker_module,
         _BUCKET_TRANSFER_MODULE: _patch_bucket_transfer_module,
         _VLLM_ROLLOUT_MODULE: _patch_vllm_rollout_module,
+        _MATH_REWARD_MODULE: _patch_math_reward_module,
     }
 
     def find_spec(self, fullname, path=None, target=None):
@@ -255,6 +276,9 @@ def install_delayed_patches() -> None:
     loaded_vllm_rollout = sys.modules.get(_VLLM_ROLLOUT_MODULE)
     if loaded_vllm_rollout is not None:
         _patch_vllm_rollout_module(loaded_vllm_rollout)
+    loaded_math_reward = sys.modules.get(_MATH_REWARD_MODULE)
+    if loaded_math_reward is not None:
+        _patch_math_reward_module(loaded_math_reward)
     if not any(isinstance(finder, _VerlPatchFinder) for finder in sys.meta_path):
         sys.meta_path.insert(0, _VerlPatchFinder())
 
