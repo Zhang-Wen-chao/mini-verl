@@ -71,12 +71,13 @@
 - 备注：MATH-lighteval 为 AMC/AIME 级难题，4B 无思考模式绝对精度低属正常；
   相对提升（3.4x）才是有效信号。
 
-## 6. 下一步（规划）
+## 6. 后续工作（2026-08-20 状态）
 
 1. ✅ 验收：exit_status/checkpoint/rollout 齐全（本文件）
 2. ✅ 汇总曲线 + 回落诊断（本文件 + analysis_regression_510_vs_679.md）
-3. 🔄 held-out 评测：MATH-lighteval 5000 题抽 200，base vs 679 同协议对比
-4. ⏳ 分流：若 held-out 正向 → 固化基线 + 扩数据到 formal-10000 对照实验；
-   若回落 → 单变量诊断（lr/KL/截断/reward 稀疏）
+3. ✅ held-out 评测：MATH-lighteval 5000 题抽 200，base vs 679 同协议对比，结果为
+   2.5% → 8.5%（见 5b）。
+4. ⏳ 固化当前正向基线后，扩数据到 formal-10000 的单变量对照实验；同时监控
+   lr/KL、长度截断、reward 稀疏与评分器鲁棒性。
 5. ⏳ 官方 verl 数据流映射回 mini-verl（只复现可单机验证的 GRPO 语义）
 6. ⏳ 完整报告 + 提交（本文件 + 两份分析）

@@ -1,6 +1,28 @@
-# mini-verl
+# mini-verl：从可验证 GRPO 到官方 verl 4B 实验
 
-从零实现、面向理解与性能实验的 **LLM 强化学习训练框架**。项目以 `verl` 的核心数据流为原型，但不追求 API 兼容；目标是用可读、可测、可 profile 的最小实现，打通 rollout、奖励、GRPO 更新和分布式资源协同。
+这是一个以 **LLM GRPO 后训练**为主线的研究与工程仓库，包含两层互补工作：
+
+1. `mini_verl/`：从零实现、可单元测试和可 profile 的最小 GRPO 框架，用来理解与验证数据流、策略版本和性能取舍。
+2. `official_verl/`：使用锁定版本的官方 `verl` 在 4 张 L20 上完成真实 GRPO 训练，用来验证这条链路能在真实 4B 模型上产生 held-out 改善。
+
+## 先看这里：成果、边界与入口
+
+| 你想知道什么 | 当前结论 | 证据 / 入口 |
+|---|---|---|
+| 这个项目做成了吗？ | **做成了可验证的 GRPO 闭环，并完成真实 4B 质量实验。** | [项目状态](PROJECT_STATUS.md) |
+| 最大亮点是什么？ | Qwen3.5-4B 在从未参与训练的 200 道 MATH 题上从 **2.5% (5/200)** 提升到 **8.5% (17/200)**，即 **3.4×**。 | [679-step 验收](run_679_acceptance.md) |
+| 训练到底可靠吗？ | 2037 条训练题与监控集零重叠；held-out 使用独立 MATH 集、相同 prompt/greedy 解码与归一化评分。 | [验收协议与结果](run_679_acceptance.md) |
+| mini 框架有什么？ | GRPO、reference-KL、HF rollout/trainer、策略版本同步、checkpoint、DDP smoke、变长 batching、one-step-lag prefetch 与性能观测。 | [实现进度](#mini-verl-实现进度框架层) |
+| 下一步做什么？ | 固化 4B 基线后扩大到 formal-10k 对照；同时把已验证的官方数据流继续映射回 `mini_verl`。 | [项目状态：下一步](PROJECT_STATUS.md#下一步) |
+
+### 推荐阅读路径
+
+- **只想 3 分钟了解项目：**本页 → [项目状态](PROJECT_STATUS.md) → [679-step 验收](run_679_acceptance.md)。
+- **想看实现：**本页的框架进度 → `mini_verl/` → [RUNBOOK](RUNBOOK.md) → `tests/`。
+- **想复现真实训练：**[official_verl/README](official_verl/README.md) → [679-step 验收](run_679_acceptance.md) → `official_verl/` 下的脚本与运行记录。
+- **想补算法背景：**[RL 速成课](rl-crash-course.md)。
+
+`mini_verl` 是其中从零实现、面向理解与性能实验的 **LLM 强化学习训练框架**。它以 `verl` 的核心数据流为原型，但不追求 API 兼容；目标是用可读、可测、可 profile 的最小实现，打通 rollout、奖励、GRPO 更新和分布式资源协同。
 
 ## 为什么做它
 
@@ -25,7 +47,7 @@ RolloutWorker (actor policy v_k) -- trajectories --> RewardWorker
 
 **刻意不做：**完整 verl API 兼容、Ray 集群编排、多模态、任意模型/奖励模型兼容、生产级容错；这些会在核心闭环已正确且有 benchmark 的前提下再逐步扩展。
 
-## 计划
+## mini-verl 实现进度（框架层）
 
 ### Phase 0 — 设计与基础设施
 
@@ -115,7 +137,7 @@ mini-verl/
 4. **按 token 衡量。** LLM RL 的 response 变长，样本/s 往往会误导。
 5. **每项性能结论可复现。** 记录模型、权重、输入长度、batch、warmup、硬件与统计方式。
 
-## 已验证的运行结果
+## mini-verl 已验证的运行结果
 
 - 在 L20 单卡 PyTorch/Transformers 环境中，73 项测试全部通过：包括纯数学 reference、CUDA GRPO 梯度、causal-LM response 对齐、Hugging Face rollout/old-logprob/trainer、左填充 prompt micro-batching、prompt-length bucketing、prefill/sequence token budget、context-window fail-fast guard（稳定输出顺序、group 归属、old-logprob 对齐、padding/峰值统计）、checkpoint、策略同步，以及同步/one-step-lag Controller（含真实双 CausalLM 副本）端到端迭代与 length-bucketing 对照。
 - toy GRPO 闭环的 greedy pass@1 从 `0.125` 提升到 `1.000`；末轮同步 iteration 约 `8.7 ms`。100 iteration、1 次 warmup、3 次重复的单卡 L20 中位性能为 `114.2 iteration/s`。该 toy workload 只用于正确性，不代表真实模型吞吐。
@@ -123,24 +145,24 @@ mini-verl/
 
 完整复现命令和口径见 [RUNBOOK.md](RUNBOOK.md)；最近一次 L20 toy CUDA 基准的环境、命令、原始 JSON 与解释见 [PERFORMANCE_REPORT.md](PERFORMANCE_REPORT.md)。
 
-## 官方 verl 实验（下一阶段）
+## 官方 verl：已完成的真实 4B 验证
 
-`mini-verl` 的下一步不是立即扩大框架范围，而是先用官方
-[`verl`](https://github.com/volcengine/verl) 跑通一条可验证的 GRPO 训练。
-实验契约、GSM8K 数据转换/严格 `\boxed{integer}` 奖励、上游 commit 锁定、
-Linux/CUDA preflight 与运行记录模板位于
-[official_verl/README.md](official_verl/README.md)。先完成 Qwen3-0.6B 的 4-GPU
-systems smoke 并保存
-reward、KL、长度、checkpoint 和 held-out 评测，之后再回到本项目逐项映射
-`dataset → rollout → reward → advantage → actor/reference logprob → update`。
+官方 `verl` 部分不是 `mini_verl` 的替代实现，而是对真实训练栈的受控验证：锁定
+上游版本、数据来源、奖励契约、4-GPU 拓扑与运行证据，再把可解释的数据流反向映射
+回最小实现。
 
-这条官方链路已在 2026-08-18 完成首次真实执行：Qwen3-0.6B、OpenAI GSM8K
-256/64 split、GRPO、4 x L20（2 FSDP2 trainer + 2 TP=2 vLLM rollout）、16/16
-checkpoint。它证明的是官方 FSDP2 + vLLM 训练/生成/验证/存档链路真实可用，
-不是质量提升：held-out `acc@1` 从 `0.015625` 到 `0.0`。因此下一步应先做
-4B 的显存预算和短 smoke，再把这条精确数据流映射为 mini-verl 的单机可验证版；
-不要把这个 0.6B、16-step 结果当作可推广的训练配方。完整复现边界与运行记录
-位置见 [official_verl/README.md](official_verl/README.md)。
+路线已经从 **0.6B 系统 smoke**（证明 FSDP2 + vLLM + checkpoint + clean exit）推进到
+**Qwen3.5-4B 的 679-step 正式 GRPO run**。后者在 2037 条去泄漏训练题上训练，使用
+3 张 FSDP2 actor 卡和 1 张 vLLM rollout 卡；独立 MATH held-out 200 题结果为 5/200 →
+17/200（2.5% → 8.5%，3.4×）。这是一条真实但仍受限的小规模质量结论，不等于
+“通用数学能力已解决”；评测协议、评分器边界和训练后期长度风险都记录在验收文档中。
+
+完整入口：
+
+- [官方实验说明与复现边界](official_verl/README.md)
+- [Qwen3.5-4B / 679-step 正式验收](run_679_acceptance.md)
+- [510 → 679 评测回落诊断](analysis_regression_510_vs_679.md)
+- [真实实验踩坑与可复用经验](lessons-learned.md)
 
 ## 最小面试表述
 
