@@ -60,6 +60,8 @@ if (( PPO_MINI_BATCH_SIZE > TRAIN_BATCH_SIZE )); then
 fi
 
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1,2,3}
+export NCCL_SHM_DISABLE=${NCCL_SHM_DISABLE:-1}
+export CUDA_DEVICE_MAX_CONNECTIONS=${CUDA_DEVICE_MAX_CONNECTIONS:-1}
 export RAY_DEDUP_LOGS=${RAY_DEDUP_LOGS:-0}
 export TOKENIZERS_PARALLELISM=${TOKENIZERS_PARALLELISM:-false}
 export PYTHONPATH="$COMPAT_PATH${PYTHONPATH:+:$PYTHONPATH}"
@@ -74,6 +76,9 @@ fi
 
 mkdir -p "$RUN_ROOT/checkpoints" "$RUN_ROOT/logs" "$RUN_ROOT/rollout_samples" "$RUN_ROOT/validation_samples"
 cd "$VERL_DIR"
+# The pinned one-step-off-policy worker factory accepts `fsdp` for the Critic.
+# It reads the engine options from critic.model.fsdp_config (not critic.fsdp),
+# while the Actor remains on FSDP2.
 set +e
 "$PYTHON_BIN" -m verl.experimental.one_step_off_policy.main_ppo \
   algorithm.adv_estimator=gae \
@@ -108,11 +113,10 @@ set +e
   actor_rollout_ref.rollout.load_format=safetensors actor_rollout_ref.rollout.layered_summon=True \
   actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
   actor_rollout_ref.ref.fsdp_config.param_offload=True algorithm.use_kl_in_reward=False \
-  critic.strategy=fsdp2 critic.model.path="$CRITIC_MODEL_PATH" \
-  critic.model.use_remove_padding=True critic.model.enable_gradient_checkpointing=True \
+  critic.strategy=fsdp ~critic.model \
+  "+critic.model={_target_:ppo_critic_config.FSDPCriticHFModelConfig,path:$CRITIC_MODEL_PATH,tokenizer_path:$CRITIC_MODEL_PATH,override_config:{},external_lib:null,trust_remote_code:false,lora:{},use_shm:false,enable_activation_offload:false,use_remove_padding:true,enable_gradient_checkpointing:true,fsdp_config:{_target_:verl.workers.config.FSDPEngineConfig,strategy:fsdp,param_offload:true,optimizer_offload:true,offload_policy:false}}" \
   critic.ppo_mini_batch_size="$PPO_MINI_BATCH_SIZE" critic.ppo_micro_batch_size_per_gpu=1 \
   critic.forward_micro_batch_size_per_gpu=1 critic.optim.lr=1e-5 \
-  critic.fsdp.param_offload=True critic.fsdp.optimizer_offload=True critic.fsdp.offload_policy=True \
   '+critic.optim.override_optimizer_config={foreach: false}' \
   trainer.critic_warmup=0 trainer.val_before_train=False trainer.logger='[console,tensorboard]' \
   trainer.project_name="$PROJECT_NAME" trainer.experiment_name="$EXPERIMENT_NAME" \

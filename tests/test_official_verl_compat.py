@@ -55,6 +55,13 @@ class OfficialVerlCompatTests(unittest.TestCase):
                 else:
                     sys.modules[name] = module
 
+    def test_one_step_patch_uses_registered_reset_for_standalone_critic(self):
+        source = COMPAT.read_text(encoding="utf-8")
+        self.assertIn("def init_models_with_standalone_critic", source)
+        self.assertIn("self.critic_wg.reset()", source)
+        self.assertIn("self.critic_wg.set_loss_fn", source)
+        self.assertNotIn("self.critic_wg.init_model()", source)
+
     def test_gpu_mapping_patch_is_opt_in(self):
         source = COMPAT.read_text(encoding="utf-8")
         self.assertIn('MINI_VERL_DEBUG_GPU_MAPPING', source)

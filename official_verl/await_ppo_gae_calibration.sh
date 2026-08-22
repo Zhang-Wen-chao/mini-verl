@@ -17,7 +17,12 @@ log() { printf '%s %s\n' "$(date --iso-8601=seconds)" "$*" | tee -a "$WATCH_LOG"
 stop() { log "GATE_FAILED: $*"; printf '%s\n' "$*" >"$RUN_ROOT/logs/gate_failure"; exit 1; }
 
 [[ -x "$PYTHON_BIN" ]] || stop "missing runtime interpreter: $PYTHON_BIN"
-[[ -f "$LOCAL_ROOT/status" && "$(<"$LOCAL_ROOT/status")" == local_sync_complete ]] || stop "missing successful local official-verl bootstrap"
+[[ -f "$VERL_DIR/UPSTREAM_COMMIT" ]] || stop "missing local pinned official-verl source"
+[[ -f "$VERL_DIR/uv.lock" ]] || stop "missing local official-verl lock"
+[[ -f "$ROOT/.official-verl/verl/UPSTREAM_COMMIT" ]] || stop "missing persistent pinned official-verl source"
+[[ -f "$ROOT/.official-verl/verl/uv.lock" ]] || stop "missing persistent official-verl lock"
+cmp -s "$VERL_DIR/UPSTREAM_COMMIT" "$ROOT/.official-verl/verl/UPSTREAM_COMMIT" || stop "local and persistent official-verl revisions differ"
+cmp -s "$VERL_DIR/uv.lock" "$ROOT/.official-verl/verl/uv.lock" || stop "local and persistent official-verl locks differ"
 
 deadline=$(( $(date +%s) + WAIT_SECONDS ))
 log "waiting for four idle GPUs; this watcher will not alter foreign processes"

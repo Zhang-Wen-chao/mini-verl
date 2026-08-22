@@ -30,7 +30,7 @@ _MATH_REWARD_MODE_ENV = "MINI_VERL_MATH_REWARD_MODE"
 
 
 def _patch_one_step_module(module) -> None:
-    """Fix the missing generation-dump executor lifecycle upstream."""
+    """Apply narrow compatibility fixes to the pinned one-step trainer."""
     trainer_cls = module.OneStepOffRayTrainer
     if getattr(trainer_cls, "_mini_verl_dump_lifecycle_patch", False):
         return
@@ -54,6 +54,37 @@ def _patch_one_step_module(module) -> None:
 
     trainer_cls._dump_generations = dump_generations_with_lazy_executor
     trainer_cls.fit = fit_with_dump_executor_cleanup
+
+    # The pinned one-step trainer creates its Critic as a standalone
+    # TrainingWorker, whose registered initialization RPC is ``reset()``.
+    # Calling ``init_model()`` only works for the actor/ref composite worker
+    # groups, so the upstream one-step override fails before any PPO update.
+    # Keep its actor/ref/reward setup intact and align only the Critic branch
+    # with SeparateRayPPOTrainer._init_models().
+    def init_models_with_standalone_critic(self):
+        if self.use_critic:
+            self.critic_wg = self.all_wg[str(module.Role.Critic)]
+            self.critic_wg.reset()
+            from functools import partial
+
+            from verl.workers.utils.losses import value_loss
+
+            self.critic_wg.set_loss_fn(partial(value_loss, config=self.orig_critic_cfg))
+
+        if self.use_reference_policy and not self.ref_in_actor:
+            self.ref_policy_wg = self.all_wg[str(module.Role.RefPolicy)]
+            self.ref_policy_wg.init_model()
+
+        self.rm_wg = None
+        if self.use_rm:
+            self.rm_wg = self.all_wg[str(module.Role.RewardModel)]
+            self.rm_wg.init_model()
+
+        self.actor_wg = self.all_wg[str(module.Role.Actor)]
+        self.actor_wg.init_model()
+        self.actor_rollout_wg = self.actor_wg
+
+    trainer_cls._init_models = init_models_with_standalone_critic
     trainer_cls._mini_verl_dump_lifecycle_patch = True
 
 
