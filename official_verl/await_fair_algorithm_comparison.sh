@@ -44,6 +44,12 @@ stop() { log "GATE_FAILED: $*"; printf '%s\n' "$*" >"$RUN_ROOT/logs/gate_failure
 cmp -s "$VERL_DIR/UPSTREAM_COMMIT" "$ROOT/.official-verl/verl/UPSTREAM_COMMIT" || stop "local and persistent revisions differ"
 cmp -s "$VERL_DIR/uv.lock" "$ROOT/.official-verl/verl/uv.lock" || stop "local and persistent locks differ"
 
+# This validation does not construct a model or reserve a GPU. Run it before
+# waiting so an idle four-GPU window is not consumed by its CUDA import probe.
+if ! "$PYTHON_BIN" "$ROOT/official_verl/preflight.py" --verl-dir "$VERL_DIR" --require-cuda --require-runtime --require-lock >"$RUN_ROOT/logs/preflight.json"; then
+  stop "runtime preflight failed"
+fi
+
 deadline=$(( $(date +%s) + WAIT_SECONDS ))
 log "waiting for four idle GPUs; this watcher will not alter foreign processes"
 while true; do
@@ -51,15 +57,10 @@ while true; do
     (( $(date +%s) < deadline )) || stop "timed out waiting for idle GPUs"
     sleep 30
   done
-  if ! "$PYTHON_BIN" "$ROOT/official_verl/preflight.py" --verl-dir "$VERL_DIR" --require-cuda --require-runtime --require-lock >"$RUN_ROOT/logs/preflight.json"; then
-    stop "runtime preflight failed"
-  fi
-  # CUDA/Ray preflight itself takes long enough for another shared user to claim
-  # the GPUs. Re-check immediately before creating any Ray or vLLM process.
-  # A busy GPU here returns to the idle wait instead of starting a mixed-tenant
-  # run or requiring a human to restart the overnight watcher.
+  # Re-check immediately before creating any Ray or vLLM process. A busy GPU
+  # here returns to the idle wait instead of starting a mixed-tenant run.
   if nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | grep -q '[0-9]'; then
-    log "GPU became busy during runtime preflight; returning to idle wait"
+    log "GPU became busy immediately before launch; returning to idle wait"
     continue
   fi
   break
