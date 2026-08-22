@@ -26,6 +26,7 @@
 ## 5. 学习：理解术语与算法
 
 - [RL / PPO / GRPO / DPO 速成](guides/rl-crash-course.md)。
+- [极小 PPO actor--critic 与 GRPO 对照](guides/ppo-grpo-toy-comparison.md)：同一 toy 环境中，哪些测试可共享、Critic/GAE 与组内 advantage 如何不同，以及昨晚 170-step 对照实际测了什么。
 
 ## 阅读原则
 

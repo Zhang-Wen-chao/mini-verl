@@ -48,6 +48,7 @@ telemetry、限制和下一步见[170-step GRPO 开发对照](docs/results/qwen3
 | **代码实现了什么？** | [mini_verl 架构与实现进度](docs/architecture/mini-verl-architecture.md) | 数据流、模块职责、已完成的框架能力 |
 | **怎样跑测试、benchmark 或实验？** | [运行指南](docs/guides/runbook.md) | 本地、GPU 与官方 verl 的执行命令 |
 | **异步训练、PPO、GRPO 是什么？** | [RL 速成课](docs/guides/rl-crash-course.md) | 算法直觉与本仓库的对应关系 |
+| **PPO 能和 GRPO 用相同测试比较吗？昨晚的 170-step 在测什么？** | [极小 PPO 与 GRPO 对照](docs/guides/ppo-grpo-toy-comparison.md) | 共享 toy 环境/`pass@1`；清楚区分 Critic/GAE、组内 advantage 与 no-std 对照 |
 | **官方 verl 脚本和历史证据在哪？** | [official_verl 实验索引](official_verl/README.md) | 可执行脚本、固定版本、结果、runlog 归档 |
 
 如果只读三份文档，请按这个顺序：

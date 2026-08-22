@@ -31,7 +31,7 @@ Qwen3.5-4B：校准奖励、解决 2+2 拓扑 OOM、验证 3+1 拓扑
 
 | 层级 | 状态 | 做成了什么 | 应该读什么 |
 |---|---|---|---|
-| 最小框架 `mini_verl/` | 已完成核心闭环 | trajectory 契约、GRPO + KL、HF rollout/trainer、策略同步、checkpoint、DDP smoke、长度调度与性能观测 | [框架架构与实现进度](architecture/mini-verl-architecture.md)、[运行指南](guides/runbook.md) |
+| 最小框架 `mini_verl/` | 已完成核心闭环 | trajectory 契约、GRPO + KL、HF rollout/trainer、策略同步、checkpoint、DDP smoke、长度调度与性能观测；另有与 GRPO 共用 toy 环境的 PPO actor-critic 教学实现 | [框架架构与实现进度](architecture/mini-verl-architecture.md)、[PPO/GRPO toy 对照](guides/ppo-grpo-toy-comparison.md)、[运行指南](guides/runbook.md) |
 | 官方训练系统 `official_verl/` | 已完成 | 锁定官方 `verl`、FSDP2 + vLLM、preflight、数据转换、规则奖励、checkpoint 与 clean exit | [官方实验资产索引](../official_verl/README.md)、[0.6B 系统 smoke](../official_verl/docs/results/qwen3-0.6b-gsm8k-smoke.md) |
 | 4B 训练质量 | 已完成第一条有效实验 | Qwen3.5-4B、2037 训练题、679 step、4×L20、独立 held-out 正向提升 | [679-step 结果](results/qwen3.5-4b-grpo-679-step.md) |
 | GRPO 算法开发对照 | 已完成单 seed 筛选 | 先通过 20-step no-std health gate，再从 base 跑 no-std / standard 各 170 step；两段均 clean exit、170 rollout、完整 checkpoint | [170-step 开发对照](results/qwen3.5-4b-grpo-170-step-development-ablation.md) |
@@ -93,7 +93,7 @@ rollout → trajectory / old logprob → reward → group advantage
 
 | 项目 | 状态 | 原因 / 位置 |
 |---|---|---|
-| PPO actor-critic / GAE | 未做 | `mini_verl` 当前专注 GRPO；PPO 需要 value/critic 的额外资源与稳定性设计 |
+| LLM PPO actor-critic / GAE | 未做 | 已有单 token categorical 的教学版 Critic/GAE/PPO loss；真实 LLM 仍需要 value head、多 token rollout、分布式 Critic 与资源稳定性设计，见 [PPO/GRPO toy 对照](guides/ppo-grpo-toy-comparison.md) |
 | 学习型 Reward Model、DPO、KTO | 未做 | 当前真实实验使用可审计的数学规则 reward，避免把奖励模型误差与 GRPO 混在首条质量结论中 |
 | vLLM / SGLang 作为 `mini_verl` rollout backend | 未做 | 最小框架已有 HF backend；官方验证已使用 vLLM，下一步再决定是否抽象回接 |
 | 多机、异构硬件、生产级容错 | 未做 | 有意不纳入教学/验证型最小实现 |
