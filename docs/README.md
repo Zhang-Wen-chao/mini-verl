@@ -27,6 +27,7 @@
 ## 5. 学习：理解术语与算法
 
 - [RL / PPO / GRPO / DPO 速成](guides/rl-crash-course.md)。
+- [强化学习动画视频笔记](guides/rl-video-notes/README.md)：B 站「耿直哥」系列视频的中文学习笔记（TRPO / PPO / GRPO / DAPO / RLHF-DPO）。
 
 ## 阅读原则
 
