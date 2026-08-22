@@ -12,6 +12,7 @@ WAIT_AND_RUN_CALIBRATION = OFFICIAL_VERL_DIR / "wait_and_run_qwen3_5_4b_4gpu_cal
 PPO_CALIBRATION = OFFICIAL_VERL_DIR / "run_qwen3_5_4b_ppo_gae_calibration.sh"
 PPO_GATE = OFFICIAL_VERL_DIR / "await_ppo_gae_calibration.sh"
 FAIR_COMPARISON_GATE = OFFICIAL_VERL_DIR / "await_fair_algorithm_comparison.sh"
+FAIR_COMPARISON_CONTINUATION = OFFICIAL_VERL_DIR / "continue_fair_grpo_after_ppo.sh"
 
 
 class OfficialVerlSmokeScriptTests(unittest.TestCase):
@@ -152,4 +153,13 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         self.assertIn("critic.data_loader_seed=", text)
         self.assertIn("FAIR_COMPARISON_LEG_FINISHED", text)
         self.assertIn("will not alter foreign processes", text)
+        self.assertNotIn("kill -", text)
+
+    def test_fair_comparison_continuation_requires_a_passing_ppo_gate(self):
+        subprocess.run(["bash", "-n", str(FAIR_COMPARISON_CONTINUATION)], check=True)
+        text = FAIR_COMPARISON_CONTINUATION.read_text(encoding="utf-8")
+        self.assertIn("PPO_RUN_ROOT", text)
+        self.assertIn("FAIR_COMPARISON_LEG_FINISHED: ppo completed", text)
+        self.assertIn("ALGORITHM=grpo", text)
+        self.assertIn("PPO gate failed", text)
         self.assertNotIn("kill -", text)
