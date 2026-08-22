@@ -11,6 +11,7 @@ CALIBRATION = OFFICIAL_VERL_DIR / "run_qwen3_5_4b_4gpu_calibration.sh"
 WAIT_AND_RUN_CALIBRATION = OFFICIAL_VERL_DIR / "wait_and_run_qwen3_5_4b_4gpu_calibration.sh"
 PPO_CALIBRATION = OFFICIAL_VERL_DIR / "run_qwen3_5_4b_ppo_gae_calibration.sh"
 PPO_GATE = OFFICIAL_VERL_DIR / "await_ppo_gae_calibration.sh"
+FAIR_COMPARISON_GATE = OFFICIAL_VERL_DIR / "await_fair_algorithm_comparison.sh"
 
 
 class OfficialVerlSmokeScriptTests(unittest.TestCase):
@@ -133,3 +134,18 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         self.assertIn("global_step_1", gate)
         self.assertIn("will not alter foreign processes", gate)
         self.assertNotIn("kill -", gate)
+
+    def test_fair_comparison_gate_freezes_shared_rollout_budget(self):
+        subprocess.run(["bash", "-n", str(FAIR_COMPARISON_GATE)], check=True)
+        text = FAIR_COMPARISON_GATE.read_text(encoding="utf-8")
+        self.assertIn("ALGORITHM to ppo or grpo", text)
+        self.assertIn("TRAIN_BATCH_SIZE=3", text)
+        self.assertIn("ROLLOUT_N=4", text)
+        self.assertIn("AGENT_NUM_WORKERS=12", text)
+        self.assertIn("TRAINER_GPUS=3", text)
+        self.assertIn("ROLLOUT_GPUS=1", text)
+        self.assertIn("algorithm.norm_adv_by_std_in_grpo=true", text)
+        self.assertIn("critic.model.fsdp_config.seed=", text)
+        self.assertIn("FAIR_COMPARISON_LEG_FINISHED", text)
+        self.assertIn("will not alter foreign processes", text)
+        self.assertNotIn("kill -", text)
