@@ -25,12 +25,14 @@ class GrpoDevelopmentPairSummaryTests(unittest.TestCase):
             (root / "logs" / "exit_status").write_text("0\n", encoding="utf-8")
             (root / "logs" / "watch_exit_status").write_text("0\n", encoding="utf-8")
             (root / "logs" / "train.log").write_text(
-                "step:0 - val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1:np.float64(0.5)\n"
+                "step:0 - val-aux/example:np.float64(0.5) - "
+                "val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1:np.float64(0.5)\n"
                 "step:1 - training/global_step:1 - actor/ppo_kl:np.float64(0.1) - "
                 "critic/score/mean:0.5 - actor/grad_norm:np.float64(1.0) - timing_s/step:2.0\n"
                 "step:2 - training/global_step:2 - actor/ppo_kl:np.float64(0.2) - "
                 "critic/score/mean:0.0 - actor/grad_norm:np.float64(0.0) - timing_s/step:4.0\n"
-                "step:2 - val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1:np.float64(0.75)\n",
+                "step:2 - training/global_step:2 - val-aux/example:np.float64(0.75) - "
+                "val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1:np.float64(0.75)\n",
                 encoding="utf-8",
             )
             run = summary.summarize("test", root, 2)
@@ -38,6 +40,8 @@ class GrpoDevelopmentPairSummaryTests(unittest.TestCase):
             self.assertEqual(run.finite_kl_steps, 2)
             self.assertEqual(run.mixed_nonzero_grad_groups, 1)
             self.assertAlmostEqual(run.mean_step_seconds or 0, 3.0)
+            self.assertEqual(run.monitor_initial, 0.5)
+            self.assertEqual(run.monitor_final, 0.75)
             report = summary.render(run, run)
             self.assertIn("single-seed development comparison", report)
             self.assertIn("held-out 200 set was not read", report)

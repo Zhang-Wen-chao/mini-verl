@@ -41,8 +41,15 @@ def number_after(line: str, key: str) -> float | None:
 
 
 def monitor_at_step(text: str, step: int) -> float | None:
-    marker = f"step:{step} - val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1:"
-    values = [number_after(line, "val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1") for line in text.splitlines() if marker in line]
+    # The upstream log also emits val-aux fields before val-core, and the final
+    # validation shares its line with training/global_step.  Match the step
+    # prefix plus the metric rather than assuming an adjacent field order.
+    step_pattern = re.compile(rf"(?:^|\) )step:{step}(?:\D|$)")
+    values = [
+        number_after(line, "val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1")
+        for line in text.splitlines()
+        if step_pattern.search(line) and "val-core/DigitalLearningGmbH/MATH-lighteval/acc/mean@1" in line
+    ]
     values = [value for value in values if value is not None]
     return values[-1] if values else None
 
