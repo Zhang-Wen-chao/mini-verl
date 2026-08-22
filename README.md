@@ -21,7 +21,22 @@
 这是一条受控实验下的正向质量证据，不代表所有数学任务或模型都会得到同样结果；
 完整协议、checkpoint、评分器边界与反例都保存在结果文档中。
 
-### 最新进展：完成 GRPO advantage 标准化的受控开发对照
+### 最新进展：PPO 与 GRPO 已完成同样本预算的 5-step 可行性对照
+
+2026-08-22 在同一 Qwen3.5-4B base、相同 2,037 条训练数据、seed、3 trainer + 1 vLLM
+拓扑、每步 3 prompts × 4 rollouts = 12 trajectories 的契约下，真实 PPO/GAE + 4B Critic
+与 standard GRPO 均完成 5 个 update、最终 checkpoint、rollout 样本及 clean watcher exit。PPO
+在保留完整样本预算的前提下需启用 Critic activation offload 才能越过 Critic backward 的显存
+峰值；完成后 PPO 训练 loop 用时 8m35s、最后一步 Actor 最大 allocated GPU memory 35.70 GB，
+GRPO 分别为 6m42s、31.53 GB。
+
+固定 64 题开发 monitor 的变化是 PPO 41/64 → 45/64，GRPO 40/64 → 42/64。**这不是
+算法胜负结论**：只有 5 step、单 seed、两边起点不同，且 64 题已被反复读取。本轮可靠结论是
+“真实 4B actor--critic PPO 在当前 4×L20 与完整 12-trajectory 契约下可运行，但比这次 GRPO
+短运行消耗更多资源”。完整的契约、首次 OOM 边界、artifact 和后续要求见
+[PPO/GRPO 5-step 公平开发对照](official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md)。
+
+### 此前进展：完成 GRPO advantage 标准化的受控开发对照
 
 2026-08-22 还完成了一组新的 4×L20、3 trainer + 1 vLLM rollout 的串行实验：先用
 20 step no-std GRPO 校准环境，再从 base 分别运行两个 170-step development run。两段
@@ -44,7 +59,8 @@ telemetry、限制和下一步见[170-step GRPO 开发对照](docs/results/qwen3
 |---|---|---|
 | **项目现在在哪、下一步做什么？** | [当前状态与路线图](docs/project-status.md) | 已完成、未做、下一步的唯一权威入口 |
 | **4B 实验究竟取得了什么结果？** | [Qwen3.5-4B / 679-step 结果](docs/results/qwen3.5-4b-grpo-679-step.md) | 训练配置、评测协议、3.4× held-out 结果和边界 |
-| **昨晚的 GRPO 算法对照说明什么？** | [170-step 开发对照](docs/results/qwen3.5-4b-grpo-170-step-development-ablation.md) | no-std vs standard 的完成证据、telemetry 与不可过度解释的边界 |
+| **PPO 与 GRPO 的最新对照说明什么？** | [PPO/GRPO 5-step 公平开发对照](official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md) | 相同 12-trajectory 预算下的可行性、资源代价与严格边界 |
+| **此前 GRPO 算法对照说明什么？** | [170-step 开发对照](docs/results/qwen3.5-4b-grpo-170-step-development-ablation.md) | no-std vs standard 的完成证据、telemetry 与不可过度解释的边界 |
 | **代码实现了什么？** | [mini_verl 架构与实现进度](docs/architecture/mini-verl-architecture.md) | 数据流、模块职责、已完成的框架能力 |
 | **怎样跑测试、benchmark 或实验？** | [运行指南](docs/guides/runbook.md) | 本地、GPU 与官方 verl 的执行命令 |
 | **异步训练、PPO、GRPO 是什么？** | [RL 速成课](docs/guides/rl-crash-course.md) | 算法直觉与本仓库的对应关系 |
@@ -60,9 +76,9 @@ docs/project-status.md
 
 ## 当前计划
 
-1. 固化 679-step held-out 基线，以及本次 170-step no-std / standard 的 artifact、契约与开发集边界。
-2. 不用已反复查看的 64 题或 MATH held-out 200 直接宣布算法胜负；先固定新的 development / final 划分。
-3. 只有在资源预算允许时，才以多 seed 的短筛选确认标准化变量；通过后再决定是否做更长 run 或数据规模对照。
+1. 固化 679-step held-out 基线、170-step GRPO 对照及 PPO/GRPO 5-step artifact；不把短开发遥测写成算法胜负。
+2. 固定新的 development / final 划分、停止规则与 seed 数；不复用 64 题或 MATH held-out 200 来选择算法。
+3. 资源允许时，先以该冻结契约进行 20-step PPO/GRPO development 对照，再决定多 seed 或更长 run。
 4. 将官方路径中已验证的语义继续回写到 `mini_verl/`，不复制 Ray/FSDP/vLLM 的完整生产编排。
 
 详见 [当前状态与路线图](docs/project-status.md#下一步)。
