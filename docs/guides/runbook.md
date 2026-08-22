@@ -35,6 +35,17 @@ sample G responses with old logprobs
 → policy version + 1
 ```
 
+## Official verl experiments (Linux/CUDA only)
+
+The Qwen3.5-4B experiments use a locked upstream `verl` runtime, not this repository's
+teaching implementation. Their launch scripts, data preparation, preflight and artifact
+index are in [official_verl/README.md](../../official_verl/README.md). Do not launch them
+from the macOS development host; they require the documented Linux/CUDA container runtime.
+
+The accepted 4B GRPO result and the PPO/GRPO 5-step feasibility/resource comparison are
+records, not copy-paste local commands. Start from the `official_verl` README and its
+preflight instructions when reproducing on an authorized GPU host.
+
 For a reproducible run, create a RunConfig with the seed, selected device and deterministic flag, then call seed_everything before model construction or rollout.
 
 ## Minimal PPO actor--critic comparison

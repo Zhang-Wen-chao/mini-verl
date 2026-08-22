@@ -1,4 +1,7 @@
-# mini-verl 性能记录
+# mini_verl 性能实验
+
+本页只记录 `mini_verl/` 的受控性能实验。官方 `verl` 的 0.6B 系统 smoke 结果见
+[官方 smoke 结果](../../official_verl/docs/results/qwen3-0.6b-gsm8k-smoke.md)。
 
 ## 2026-08-18：toy GRPO Controller
 
