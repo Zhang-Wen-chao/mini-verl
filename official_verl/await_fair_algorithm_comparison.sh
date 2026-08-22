@@ -53,6 +53,12 @@ done
 if ! "$PYTHON_BIN" "$ROOT/official_verl/preflight.py" --verl-dir "$VERL_DIR" --require-cuda --require-runtime --require-lock >"$RUN_ROOT/logs/preflight.json"; then
   stop "runtime preflight failed"
 fi
+# CUDA/Ray preflight itself takes long enough for another shared user to claim
+# the GPUs.  Re-check immediately before creating any Ray or vLLM process; a
+# race detected here is a clean gate failure, never a mixed-tenant experiment.
+if nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | grep -q '[0-9]'; then
+  stop "GPU became busy during runtime preflight; refusing to launch"
+fi
 
 common=(
   "VERL_DIR=$VERL_DIR" "MODEL_PATH=$ROOT/.official-verl/models/Qwen3.5-4B"

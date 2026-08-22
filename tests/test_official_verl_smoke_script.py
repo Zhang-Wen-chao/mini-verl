@@ -151,6 +151,7 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         self.assertIn("PPO_CRITIC_ACTIVATION_OFFLOAD=true", text)
         self.assertIn("CRITIC_ACTIVATION_OFFLOAD=$PPO_CRITIC_ACTIVATION_OFFLOAD", text)
         self.assertIn("critic.data_loader_seed=", text)
+        self.assertIn("GPU became busy during runtime preflight", text)
         self.assertIn("FAIR_COMPARISON_LEG_FINISHED", text)
         self.assertIn("will not alter foreign processes", text)
         self.assertNotIn("kill -", text)
