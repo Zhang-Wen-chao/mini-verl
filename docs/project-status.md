@@ -35,6 +35,7 @@ Qwen3.5-4B：校准奖励、解决 2+2 拓扑 OOM、验证 3+1 拓扑
 | 官方训练系统 `official_verl/` | 已完成 | 锁定官方 `verl`、FSDP2 + vLLM、preflight、数据转换、规则奖励、checkpoint 与 clean exit | [官方实验资产索引](../official_verl/README.md)、[0.6B 系统 smoke](../official_verl/docs/results/qwen3-0.6b-gsm8k-smoke.md) |
 | 4B 训练质量 | 已完成第一条有效实验 | Qwen3.5-4B、2037 训练题、679 step、4×L20、独立 held-out 正向提升 | [679-step 结果](results/qwen3.5-4b-grpo-679-step.md) |
 | GRPO 算法开发对照 | 已完成单 seed 筛选 | 先通过 20-step no-std health gate，再从 base 跑 no-std / standard 各 170 step；两段均 clean exit、170 rollout、完整 checkpoint | [170-step 开发对照](results/qwen3.5-4b-grpo-170-step-development-ablation.md) |
+| 4B PPO actor-critic 可行性 | 已准备，运行时阻断 | 1-step GAE + Critic 校准器、严格日志/产物 gate 已完成；当前 L20 遗留 CUDA 13 venv 与 CUDA 12.4 driver 不兼容，未启动 PPO | [PPO 可行性记录](../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-gae-feasibility-plan.md) |
 | 评测与实验可靠性 | 已识别并修复关键问题 | 训练/评测去重、答案格式归一化、逐题落盘、单题超时、评测回落诊断 | [回落分析](results/step-510-to-679-regression-analysis.md)、[经验记录](operations/l20-lessons-learned.md) |
 
 ## 当前最值得展示的亮点
@@ -93,7 +94,7 @@ rollout → trajectory / old logprob → reward → group advantage
 
 | 项目 | 状态 | 原因 / 位置 |
 |---|---|---|
-| LLM PPO actor-critic / GAE | 未做 | 已有单 token categorical 的教学版 Critic/GAE/PPO loss；真实 LLM 仍需要 value head、多 token rollout、分布式 Critic 与资源稳定性设计，见 [PPO/GRPO toy 对照](guides/ppo-grpo-toy-comparison.md) |
+| LLM PPO actor-critic / GAE | 校准准备完成，未执行 | 已有单 token categorical 教学版以及真实 4B 的 GAE/Critic 1-step gate；当前被 L20 CUDA runtime 兼容性阻断，详见 [PPO 可行性记录](../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-gae-feasibility-plan.md) |
 | 学习型 Reward Model、DPO、KTO | 未做 | 当前真实实验使用可审计的数学规则 reward，避免把奖励模型误差与 GRPO 混在首条质量结论中 |
 | vLLM / SGLang 作为 `mini_verl` rollout backend | 未做 | 最小框架已有 HF backend；官方验证已使用 vLLM，下一步再决定是否抽象回接 |
 | 多机、异构硬件、生产级容错 | 未做 | 有意不纳入教学/验证型最小实现 |

@@ -10,6 +10,7 @@
 
 - [Qwen3.5-4B / 679-step GRPO 结果](results/qwen3.5-4b-grpo-679-step.md)：正式实验、验收、held-out 结果。
 - [Qwen3.5-4B / 170-step GRPO 开发对照](results/qwen3.5-4b-grpo-170-step-development-ablation.md)：no-std 与 standard GRPO 的单 seed 受控筛选；明确不是 held-out 算法结论。
+- [4B PPO/GAE 可行性记录](../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-gae-feasibility-plan.md)：真实 Critic 校准的固定契约、验收条件与当前 runtime 阻断。
 - [510 → 679 训练中回落分析](results/step-510-to-679-regression-analysis.md)：为什么监控分数表面回落，以及评分器误杀边界。
 
 ## 3. 实现：代码解决了哪些问题

@@ -98,6 +98,10 @@ python -m unittest tests.test_ppo tests.test_torch_ppo tests.test_toy_ppo -v
 loss 与 GRPO policy loss 相同。后两组需要 PyTorch，分别验证可微实现/梯度和教学训练的
 `pass@1` 确实提升。
 
+2026-08-22 已在 L20 上使用实际 PyTorch（CPU 模式）运行后两类测试：actor/Critic 两路反向
+传播与端到端训练均通过，独立 toy run 的 `pass@1` 为 `0.125 → 1.000`。这验证的是教学实现；
+真实 4B Critic 校准的运行时状态见 [PPO 可行性记录](../../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-gae-feasibility-plan.md)。
+
 ## 这项实现的边界与下一步
 
 完成的是**教学级、单 token categorical PPO**：它足以解释 Critic 为什么存在，也能与同环境的

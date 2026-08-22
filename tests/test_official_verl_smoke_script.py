@@ -9,6 +9,8 @@ LOCAL_BOOTSTRAP = OFFICIAL_VERL_DIR / "bootstrap_local_official_env.sh"
 WAIT_AND_RUN = OFFICIAL_VERL_DIR / "wait_and_run_qwen3_0_6b_4gpu_smoke.sh"
 CALIBRATION = OFFICIAL_VERL_DIR / "run_qwen3_5_4b_4gpu_calibration.sh"
 WAIT_AND_RUN_CALIBRATION = OFFICIAL_VERL_DIR / "wait_and_run_qwen3_5_4b_4gpu_calibration.sh"
+PPO_CALIBRATION = OFFICIAL_VERL_DIR / "run_qwen3_5_4b_ppo_gae_calibration.sh"
+PPO_GATE = OFFICIAL_VERL_DIR / "await_ppo_gae_calibration.sh"
 
 
 class OfficialVerlSmokeScriptTests(unittest.TestCase):
@@ -106,3 +108,22 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         self.assertIn("COMPAT_PATH", text)
         self.assertIn("PYTHONPATH", text)
         self.assertIn("exit 3", text)
+
+    def test_4b_ppo_calibration_requires_real_gae_critic_evidence(self):
+        subprocess.run(["bash", "-n", str(PPO_CALIBRATION)], check=True)
+        subprocess.run(["bash", "-n", str(PPO_GATE)], check=True)
+        launcher = PPO_CALIBRATION.read_text(encoding="utf-8")
+        gate = PPO_GATE.read_text(encoding="utf-8")
+        self.assertIn("algorithm.adv_estimator=gae", launcher)
+        self.assertIn("critic.model.path=", launcher)
+        self.assertIn("critic.strategy=fsdp2", launcher)
+        self.assertIn("critic.fsdp.optimizer_offload=True", launcher)
+        self.assertIn("TRAINING_STEPS=${TRAINING_STEPS:-1}", launcher)
+        self.assertIn("TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-3}", launcher)
+        self.assertIn("ROLLOUT_N=${ROLLOUT_N:-1}", launcher)
+        self.assertIn("critic/vf_loss:", gate)
+        self.assertIn("critic/values/mean:", gate)
+        self.assertIn("critic/advantages/mean:", gate)
+        self.assertIn("global_step_1", gate)
+        self.assertIn("will not alter foreign processes", gate)
+        self.assertNotIn("kill -", gate)
