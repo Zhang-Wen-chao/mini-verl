@@ -69,7 +69,7 @@ seed_overrides=("actor_rollout_ref.actor.fsdp_config.seed=$SEED" "actor_rollout_
 set +e
 if [[ "$ALGORITHM" == ppo ]]; then
   log "starting PPO with 12 trajectories per step and real GAE Critic"
-  env "${common[@]}" "CRITIC_MODEL_PATH=$ROOT/.official-verl/models/Qwen3.5-4B" bash "$ROOT/official_verl/run_qwen3_5_4b_ppo_gae_calibration.sh" "${seed_overrides[@]}" "critic.model.fsdp_config.seed=$SEED" "critic.data_loader_seed=$SEED"
+  env "${common[@]}" "CRITIC_MODEL_PATH=$ROOT/.official-verl/models/Qwen3.5-4B" bash "$ROOT/official_verl/run_qwen3_5_4b_ppo_gae_calibration.sh" "${seed_overrides[@]}" "critic.data_loader_seed=$SEED"
 else
   log "starting standard GRPO with the same 12 trajectories per step"
   env "${common[@]}" "PROJECT_NAME=official-verl-grpo-comparison" "EXPERIMENT_NAME=qwen3.5-4b-fair-standard-grpo" bash "$ROOT/official_verl/run_qwen3_5_4b_4gpu_calibration.sh" "${seed_overrides[@]}" "algorithm.norm_adv_by_std_in_grpo=true"

@@ -145,7 +145,7 @@ class OfficialVerlSmokeScriptTests(unittest.TestCase):
         self.assertIn("TRAINER_GPUS=3", text)
         self.assertIn("ROLLOUT_GPUS=1", text)
         self.assertIn("algorithm.norm_adv_by_std_in_grpo=true", text)
-        self.assertIn("critic.model.fsdp_config.seed=", text)
+        self.assertIn("critic.data_loader_seed=", text)
         self.assertIn("FAIR_COMPARISON_LEG_FINISHED", text)
         self.assertIn("will not alter foreign processes", text)
         self.assertNotIn("kill -", text)
