@@ -20,6 +20,10 @@ TRAIN_BATCH_SIZE=3
 ROLLOUT_N=4
 AGENT_NUM_WORKERS=12
 PPO_MINI_BATCH_SIZE=3
+# The pinned FSDP1 Critic has no smaller legal global mini-batch at n=4 and
+# DP=3 (the global mini-batch must divide evenly over all three ranks).  Keep
+# all 12 trajectories and offload only saved Critic activations to CPU.
+PPO_CRITIC_ACTIVATION_OFFLOAD=true
 TRAINER_GPUS=3
 ROLLOUT_GPUS=1
 ROLLOUT_TP=1
@@ -68,8 +72,8 @@ seed_overrides=("actor_rollout_ref.actor.fsdp_config.seed=$SEED" "actor_rollout_
 
 set +e
 if [[ "$ALGORITHM" == ppo ]]; then
-  log "starting PPO with 12 trajectories per step and real GAE Critic"
-  env "${common[@]}" "CRITIC_MODEL_PATH=$ROOT/.official-verl/models/Qwen3.5-4B" bash "$ROOT/official_verl/run_qwen3_5_4b_ppo_gae_calibration.sh" "${seed_overrides[@]}" "critic.data_loader_seed=$SEED"
+  log "starting PPO with 12 trajectories per step, real GAE Critic, and Critic activation offload"
+  env "${common[@]}" "CRITIC_MODEL_PATH=$ROOT/.official-verl/models/Qwen3.5-4B" "CRITIC_ACTIVATION_OFFLOAD=$PPO_CRITIC_ACTIVATION_OFFLOAD" bash "$ROOT/official_verl/run_qwen3_5_4b_ppo_gae_calibration.sh" "${seed_overrides[@]}" "critic.data_loader_seed=$SEED"
 else
   log "starting standard GRPO with the same 12 trajectories per step"
   env "${common[@]}" "PROJECT_NAME=official-verl-grpo-comparison" "EXPERIMENT_NAME=qwen3.5-4b-fair-standard-grpo" bash "$ROOT/official_verl/run_qwen3_5_4b_4gpu_calibration.sh" "${seed_overrides[@]}" "algorithm.norm_adv_by_std_in_grpo=true"

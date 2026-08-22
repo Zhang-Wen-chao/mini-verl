@@ -26,6 +26,7 @@ EXPERIMENT_NAME=${EXPERIMENT_NAME:-qwen3.5-4b-openr1-ppo-gae-1step}
 TRAINING_STEPS=${TRAINING_STEPS:-1}
 TRAIN_BATCH_SIZE=${TRAIN_BATCH_SIZE:-3}
 PPO_MINI_BATCH_SIZE=${PPO_MINI_BATCH_SIZE:-3}
+CRITIC_ACTIVATION_OFFLOAD=${CRITIC_ACTIVATION_OFFLOAD:-false}
 ROLLOUT_N=${ROLLOUT_N:-1}
 AGENT_NUM_WORKERS=${AGENT_NUM_WORKERS:-3}
 TRAINER_GPUS=${TRAINER_GPUS:-3}
@@ -58,6 +59,7 @@ if (( PPO_MINI_BATCH_SIZE > TRAIN_BATCH_SIZE )); then
   echo "PPO_MINI_BATCH_SIZE must not exceed TRAIN_BATCH_SIZE" >&2
   exit 2
 fi
+case "$CRITIC_ACTIVATION_OFFLOAD" in true|false) ;; *) echo "CRITIC_ACTIVATION_OFFLOAD must be true or false" >&2; exit 2 ;; esac
 
 export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0,1,2,3}
 export NCCL_SHM_DISABLE=${NCCL_SHM_DISABLE:-1}
@@ -114,7 +116,7 @@ set +e
   actor_rollout_ref.ref.log_prob_micro_batch_size_per_gpu=1 \
   actor_rollout_ref.ref.fsdp_config.param_offload=True algorithm.use_kl_in_reward=False \
   critic.strategy=fsdp ~critic.model \
-  "+critic.model={_target_:ppo_critic_config.FSDPCriticHFModelConfig,path:$CRITIC_MODEL_PATH,tokenizer_path:$CRITIC_MODEL_PATH,override_config:{},external_lib:null,trust_remote_code:false,lora:{},use_shm:false,enable_activation_offload:false,use_remove_padding:true,enable_gradient_checkpointing:true,fsdp_config:{_target_:verl.workers.config.FSDPEngineConfig,strategy:fsdp,param_offload:true,optimizer_offload:true,offload_policy:false}}" \
+  "+critic.model={_target_:ppo_critic_config.FSDPCriticHFModelConfig,path:$CRITIC_MODEL_PATH,tokenizer_path:$CRITIC_MODEL_PATH,override_config:{},external_lib:null,trust_remote_code:false,lora:{},use_shm:false,enable_activation_offload:$CRITIC_ACTIVATION_OFFLOAD,use_remove_padding:true,enable_gradient_checkpointing:true,fsdp_config:{_target_:verl.workers.config.FSDPEngineConfig,strategy:fsdp,param_offload:true,optimizer_offload:true,offload_policy:false}}" \
   critic.ppo_mini_batch_size="$PPO_MINI_BATCH_SIZE" critic.ppo_micro_batch_size_per_gpu=1 \
   critic.forward_micro_batch_size_per_gpu=1 critic.optim.lr=1e-5 \
   '+critic.optim.override_optimizer_config={foreach: false}' \
