@@ -46,19 +46,24 @@ cmp -s "$VERL_DIR/uv.lock" "$ROOT/.official-verl/verl/uv.lock" || stop "local an
 
 deadline=$(( $(date +%s) + WAIT_SECONDS ))
 log "waiting for four idle GPUs; this watcher will not alter foreign processes"
-while nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | grep -q '[0-9]'; do
-  (( $(date +%s) < deadline )) || stop "timed out waiting for idle GPUs"
-  sleep 30
+while true; do
+  while nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | grep -q '[0-9]'; do
+    (( $(date +%s) < deadline )) || stop "timed out waiting for idle GPUs"
+    sleep 30
+  done
+  if ! "$PYTHON_BIN" "$ROOT/official_verl/preflight.py" --verl-dir "$VERL_DIR" --require-cuda --require-runtime --require-lock >"$RUN_ROOT/logs/preflight.json"; then
+    stop "runtime preflight failed"
+  fi
+  # CUDA/Ray preflight itself takes long enough for another shared user to claim
+  # the GPUs. Re-check immediately before creating any Ray or vLLM process.
+  # A busy GPU here returns to the idle wait instead of starting a mixed-tenant
+  # run or requiring a human to restart the overnight watcher.
+  if nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | grep -q '[0-9]'; then
+    log "GPU became busy during runtime preflight; returning to idle wait"
+    continue
+  fi
+  break
 done
-if ! "$PYTHON_BIN" "$ROOT/official_verl/preflight.py" --verl-dir "$VERL_DIR" --require-cuda --require-runtime --require-lock >"$RUN_ROOT/logs/preflight.json"; then
-  stop "runtime preflight failed"
-fi
-# CUDA/Ray preflight itself takes long enough for another shared user to claim
-# the GPUs.  Re-check immediately before creating any Ray or vLLM process; a
-# race detected here is a clean gate failure, never a mixed-tenant experiment.
-if nvidia-smi --query-compute-apps=pid --format=csv,noheader 2>/dev/null | grep -q '[0-9]'; then
-  stop "GPU became busy during runtime preflight; refusing to launch"
-fi
 
 common=(
   "VERL_DIR=$VERL_DIR" "MODEL_PATH=$ROOT/.official-verl/models/Qwen3.5-4B"
