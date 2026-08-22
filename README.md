@@ -65,6 +65,17 @@ GRPO update → policy version 数据流。阅读顺序见 [CORE.md](CORE.md)。
 
 当前已完成：依赖无模型下载的 toy GRPO 闭环，以及 Controller 驱动的 Hugging Face CausalLM rollout/old-logprob/trainer 集成路径。最短入口是 `python -m mini_verl.toy`；它在一个小型 categorical policy 上真实执行 rollout、规则奖励、组内 advantage、clipped GRPO update 与 policy version 推进。通用的本地 Hugging Face 模型 smoke 位于 `examples/hf_grpo_smoke.py`，不依赖官方 verl。
 
+### PPO actor--critic 教学对照
+
+除 GRPO 主线外，项目还提供一个刻意很小的 PPO actor--critic 对照：
+`examples/toy_ppo_train.py` 和 `mini_verl/algorithms/ppo.py`。它与 toy GRPO 使用相同的
+16-prompt categorical 环境、`0/1` rule reward、old logprob、PPO-style ratio/clip 和
+`pass@1` 验收；差别只在 advantage 的来源：PPO 用 Critic + GAE，并额外最小化 value loss，
+GRPO 用同题回答的组内相对 reward。
+
+这使“Critic 为什么存在、PPO 与 GRPO 哪部分相同”可由代码和数值单测检验；它不是 LLM
+多 token PPO、不是分布式 Critic，也不构成任何官方 verl 或 4B 训练结论。
+
 ### Phase 2 — 框架化与分布式训练
 
 - [x] 拆分 `RolloutWorker`、`RewardWorker`、`TrainerWorker`、`PolicySynchronizer` 和 `Controller` 的生命周期与数据契约。
@@ -95,7 +106,7 @@ GRPO update → policy version 数据流。阅读顺序见 [CORE.md](CORE.md)。
 
 ### v0 完成边界
 
-`main` 的核心 GRPO 闭环已经完成：`python -m mini_verl.toy` 是最短、无下载的可执行验收；Hugging Face、DDP、异步 rollout 和 bucketing 是在同一协议上增加的参考实现。PPO/critic/GAE、reward model、Agent 工具轨迹、多机容错和 serving backend 都是独立后续项目，不应以“补全 mini-verl”为由混入此主线。
+`main` 的核心 GRPO 闭环已经完成：`python -m mini_verl.toy` 是最短、无下载的可执行验收；Hugging Face、DDP、异步 rollout 和 bucketing 是在同一协议上增加的参考实现。另有一份单 token categorical 的 PPO/Critic/GAE 教学对照，边界见上节。LLM 多 token PPO、真实 value head、分布式 Critic、reward model、Agent 工具轨迹、多机容错和 serving backend 仍是独立后续项目，不应以“补全 mini-verl”为由混入此主线。
 
 ## 建议目录
 
@@ -108,6 +119,7 @@ mini-verl/
 │   ├── hf.py             # Hugging Face rollout / trainer backend
 │   ├── reward.py         # rule / model reward
 │   ├── algorithms/grpo.py
+│   ├── algorithms/ppo.py # 单 token actor--critic 教学对照
 │   ├── workers.py
 │   ├── controller.py
 │   ├── distributed.py
@@ -145,4 +157,4 @@ mini-verl/
 
 ## 最小面试表述
 
-> mini-verl 是一个面向 LLM 后训练的最小分布式 GRPO 框架。我将 rollout、奖励、trajectory 协议、策略版本同步和训练后端拆开，先验证策略优化正确性，再量化 rollout decode、训练和权重同步在端到端 iteration 中的瓶颈；后续把 mini-vllm 作为 rollout backend，研究训推资源解耦。
+> mini-verl 是一个面向 LLM 后训练的最小分布式 GRPO 框架。我将 rollout、奖励、trajectory 协议、策略版本同步和训练后端拆开，先验证策略优化正确性，再量化 rollout decode、训练和权重同步在端到端 iteration 中的瓶颈；并以一个小型 PPO actor--critic 对照说明 Critic/GAE 与 GRPO 组内 advantage 的差别。

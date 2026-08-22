@@ -37,6 +37,24 @@ sample G responses with old logprobs
 
 For a reproducible run, create a RunConfig with the seed, selected device and deterministic flag, then call seed_everything before model construction or rollout.
 
+## Minimal PPO actor--critic comparison
+
+The PPO example is a CPU-friendly teaching counterpart to the categorical GRPO
+run. It deliberately shares the environment, `0/1` reward and `pass@1` metric,
+but derives advantage from a learned value table through GAE and trains that
+Critic with a value loss. It is not an LLM multi-token PPO implementation.
+
+```bash
+python -m pip install -e '.[torch]'
+PYTHONPATH=. python examples/toy_ppo_train.py
+python -m unittest tests.test_ppo tests.test_torch_ppo tests.test_toy_ppo -v
+```
+
+The standalone run must improve `final_pass@1` above `initial_pass@1`. The
+reference tests additionally check a hand-calculated GAE trajectory, PPO clip
+sign behavior, Critic regression, and that PPO's actor term is numerically the
+same as GRPO's policy term when both are given the same advantage.
+
 ## GPU validation
 
 Run the complete suite in an environment with PyTorch and Transformers.
