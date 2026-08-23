@@ -5,8 +5,9 @@ RL loop (mini-verl) can generate rollouts through our own paged-attention
 engine instead of Hugging Face / vLLM. This is step ② of the "all-self-written
 stack" plan: mini-verl -> mini-vllm (rollout) + mini-megatron (train).
 
-The first version drives mini-vllm's TinyTransformer toy model to validate the
-protocol wiring; a transformers adapter can swap in real models later.
+old_logprobs are recomputed after generation with a forward pass over the full
+sequence (same as HuggingFaceRolloutWorker) so the GRPO ratio is meaningful —
+placeholder zeros would make ratio = exp(new_logprobs) and clip everything.
 """
 
 from __future__ import annotations
@@ -43,12 +44,42 @@ class MiniVllmRolloutWorker(RolloutWorker):
     def _decode(self, ids: list[int]) -> str:
         return self.tokenizer.decode(ids)
 
+    def _old_logprobs(self, prompt_ids: list[int], response_ids: list[int]) -> list[float]:
+        """Recompute per-token logprobs for the response via a full forward.
+
+        Uses the adapter's model (engine.model.model is the raw GPT /
+        transformers model). Returns log p(response_t | prefix) per response
+        token, matching response_logprobs_from_logits semantics.
+        """
+        model = self.engine.model.model
+        full = torch.tensor(prompt_ids + response_ids, device=self.device).unsqueeze(0)
+        try:
+            out = model(input_ids=full, attention_mask=torch.ones_like(full))
+        except TypeError:
+            out = model(input_ids=full)
+        logits = getattr(out, "logits", out)
+        if isinstance(logits, tuple):
+            logits = logits[0]
+        logits = logits[0]  # [T, V]
+        logprobs = torch.log_softmax(logits.float(), dim=-1)
+        # log p(response_t) = logits at position (prompt_len-1 + t), token response_t
+        prompt_len = len(prompt_ids)
+        probs = []
+        for t, tok in enumerate(response_ids):
+            pos = prompt_len - 1 + t
+            if pos < logits.shape[0]:
+                probs.append(float(logprobs[pos, tok].item()))
+            else:
+                probs.append(0.0)
+        return probs
+
     def rollout(self, *, policy_version: int) -> TrajectoryBatch:
         if self.engine.temperature <= 0:
             raise TrajectoryValidationError(
                 "mini-vllm rollout requires stochastic sampling (temperature > 0) "
                 "so GRPO groups are diverse"
             )
+        self.device = next(self.engine.model.model.parameters()).device
         trajectories: list[Trajectory] = []
         for prompt in self.prompts:
             prompt_ids = self._encode(prompt.text)
@@ -61,11 +92,12 @@ class MiniVllmRolloutWorker(RolloutWorker):
                 full = self.engine.output(req)
                 response_ids = full[len(prompt_ids):]
                 response_text = self._decode(response_ids)
+                old_logprobs = self._old_logprobs(prompt_ids, response_ids)
                 trajectories.append(
                     Trajectory(
                         prompt_token_ids=tuple(prompt_ids),
                         response_token_ids=tuple(response_ids),
-                        old_logprobs=(0.0,) * len(response_ids),
+                        old_logprobs=tuple(old_logprobs),
                         policy_version=policy_version,
                         group_id=prompt.metadata.get("group_id", f"p{id(prompt)}"),
                         response_text=response_text,
