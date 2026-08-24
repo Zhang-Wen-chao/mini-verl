@@ -3,6 +3,22 @@
 分支：`official-verl-grpo`。全部实验 artifact 在 L20：
 `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/rollout-opt/`
 
+**结论状态：已固定（2026-08-24）。** 实验代码与本文档锁定于本机 mini-verl `main`
+commit `f9cbe69`；上游 verl snapshot `c4b389adadc58ce51cb2b63e70df497ca166d77f`；
+运行时 `/tmp/official-verl-local-fsdp-vllm/venv`（torch 2.11.0 / transformers 5.5.3 /
+ray 2.55.1 / vllm 0.24.0 / verl 0.10.0.dev）。4 组对照实验全部跑满 16 steps，
+artifact 目录：`baseline-2plus2`、`prefix-cache`、`kv-fp8`、`spec-ngram5c`。
+
+**本实验确立的结论（每一条都可复现、带数据）：**
+
+1. 该负载（0.6B + 短 prompt + 数学推理）下，vLLM rollout 生成不是瓶颈：
+   generate 占 step 19%，actor 更新占 65%，ref 前向占 20%。
+2. 前缀缓存、KV cache fp8 量化、ngram 投机解码在本负载下均无收益
+   （generate +0.8%~+2.9%，吞吐 -2.6%~-2.8%），且未引入质量退化。
+3. PD 分离在 L20 环境不可行：vLLM 0.24.0 缺 `kv_transfer` 模块、无 `nixl` 库、无 InfiniBand。
+4. rollout 优化手段只在"decode 是瓶颈"的负载下才有意义；本负载的下一步
+   优化方向是 actor 更新与权重同步，而非 decode。
+
 ---
 
 ## 1. 实验目的
