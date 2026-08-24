@@ -135,13 +135,19 @@ PD 分离拆的是**推理内部**两个前后相接的阶段(prefill 在前、d
 
 | 手段 | 一句话 | 本仓库状态 |
 | --- | --- | --- |
-| **前缀缓存(prefix caching)** | 相同 prompt 前缀共享 KV,跳过重复 prefill | 未实现(数学题同前缀场景收益大) |
+| **前缀缓存(prefix caching)** | 相同 prompt 前缀共享 KV,跳过重复 prefill | ✅ 已实测(0.6B GRPO:无收益,prompt 短+cache 跨步失效) |
 | **异步流水线 + 一代滞后** | trainer 训 batch k 时,rollout 生成 batch k+1,最多 lag 一代 | ✅ 已实现(双 GPU prefetch 对照) |
 | **复用生成做 old_logprob** | response 的 logprob 在训练前向时顺带算,避免二次前向 | ✅ 已实现(`MiniVllmRolloutWorker`) |
 | **length bucketing / 分桶** | 相同长度请求分桶,减少 padding 浪费 | ✅ 已实现(performance 文档有对照) |
-| **投机解码** | 小模型猜、大模型验,decode 提速且无损 | ❌ 未实现 |
-| **KV cache 量化** | 长上下文省显存大头,注意误差累积 | ❌ 未实现 |
-| **PD 分离部署** | prefill/decode 拆卡,吞吐↑ 尾延迟↓ | 部分(双 GPU 解耦,非生产分离) |
+| **投机解码(ngram)** | 查重 n-gram 草稿 + 大模型验证;数学推理负载不可预测,无收益 | ✅ 已实测(0.6B GRPO:无收益) |
+| **KV cache 量化(fp8)** | 长上下文省显存大头;本负载 KV 太小,无收益但数值安全 | ✅ 已实测(0.6B GRPO:无收益) |
+| **PD 分离部署** | prefill/decode 拆卡;verl 原生支持,但本环境缺 kv_transfer/nixl/IB,不可行 | ⚠️ 记录为环境不可行 |
+
+> **实测结论(2026-08-24,0.6B + GSM8K smoke,详见 [结果文档](../results/rollout-optimization-0.6b.md)):**
+> 该负载下 rollout 生成只占 step 的 19%,瓶颈是 actor 更新(65%)与 ref 前向(20%)。
+> 四个 rollout 优化手段(前缀缓存 / KV fp8 / ngram 投机 / PD 分离)均无收益——前者因
+> prompt 短、cache 跨步失效;KV 量化因 KV 太小;ngram 投机因数学序列不可预测;PD 分离因
+> 环境缺 KV 传输栈与高速互联。**这证明 rollout 优化只在"decode 是瓶颈"的负载下才有意义。**
 
 ## 8. 面试话术:把这些串成一条逻辑线
 
