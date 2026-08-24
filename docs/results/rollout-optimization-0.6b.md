@@ -6,8 +6,10 @@
 **结论状态：已固定（2026-08-24）。** 实验代码与本文档锁定于本机 mini-verl `main`
 commit `f9cbe69`；上游 verl snapshot `c4b389adadc58ce51cb2b63e70df497ca166d77f`；
 运行时 `/tmp/official-verl-local-fsdp-vllm/venv`（torch 2.11.0 / transformers 5.5.3 /
-ray 2.55.1 / vllm 0.24.0 / verl 0.10.0.dev）。4 组对照实验全部跑满 16 steps，
-artifact 目录：`baseline-2plus2`、`prefix-cache`、`kv-fp8`、`spec-ngram5c`。
+ray 2.55.1 / vllm 0.24.0 / verl 0.10.0.dev）。对照组实验全部跑满 16 steps，
+artifact 目录：`baseline-2plus2`、`prefix-cache`、`kv-fp8`、`spec-ngram5c`、
+`microbatch-2`、`microbatch-4`、`microbatch-8`、`topology-3plus1-b12pb12`（batch 不同）。
+`topology-3plus1`（batch 不整除，失败）与 `spec-ngram5/5b`（配置错误，失败）已删除。
 
 **本实验确立的结论（每一条都可复现、带数据）：**
 
@@ -16,8 +18,13 @@ artifact 目录：`baseline-2plus2`、`prefix-cache`、`kv-fp8`、`spec-ngram5c`
 2. 前缀缓存、KV cache fp8 量化、ngram 投机解码在本负载下均无收益
    （generate +0.8%~+2.9%，吞吐 -2.6%~-2.8%），且未引入质量退化。
 3. PD 分离在 L20 环境不可行：vLLM 0.24.0 缺 `kv_transfer` 模块、无 `nixl` 库、无 InfiniBand。
-4. rollout 优化手段只在"decode 是瓶颈"的负载下才有意义；本负载的下一步
-   优化方向是 actor 更新与权重同步，而非 decode。
+4. **真正的优化在 actor 更新侧：`ppo_micro_batch_size_per_gpu` 从 1 → 8，
+   `update_actor` -80.4%（12.01→2.36 s）、step -51.1%（18.37→8.99 s）、吞吐 +107.8%
+   （521.6→1084.0 tok/s），质量无退化。**
+5. 对 0.6B 小模型，3+1 拓扑（加 trainer 卡）反而更慢（受整除约束只能 batch=12，
+   每卡样本更少 + 权重同步变慢）；加卡不如加大 micro-batch。
+6. rollout 优化手段只在"decode 是瓶颈"的负载下才有意义；本负载应先做
+   actor 更新侧优化（micro-batch 扫描），而非 decode。
 
 ---
 
@@ -133,31 +140,54 @@ verl 本版本（c4b389a）**原生支持** PD 分离：`rollout.disaggregation.
 **结论：PD 分离需要专门的 KV 传输栈（nixl/mooncake）与高速互联，本环境不具备，
 标记为不可行而非"无收益"。** 这印证了文档里的判断：PD 分离一般要求数据中心内网。
 
-## 7. 综合结论
+## 7. actor 更新优化（第二轮，micro-batch 扫描）
 
-| 手段 | 对 generate 的影响 | 对 step 的影响 | 质量 | 结论 |
-|---|---|---|---|---|
-| 前缀缓存 | +2.9% | +4.4% | 无退化 | 本负载无收益（prompt 短 + cache 跨步失效） |
-| KV cache fp8 | +0.8% | +4.3% | 无退化 | 本负载无收益（KV 太小，非瓶颈） |
-| ngram 投机 | +1.2% | +3.5% | 无退化 | 本负载无收益（数学序列不可预测） |
-| PD 分离 | — | — | — | 环境不可行（缺 kv_transfer/nixl/IB） |
+基线分析显示 `update_actor` 占 step 65%，是真正瓶颈。第二轮针对它做受控扫描
+（保持 2+2 拓扑、batch=16、其余参数不变，只改 `ppo_micro_batch_size_per_gpu`）：
 
-**核心洞察（面试可讲）：**
+| micro_batch | update_actor | step | throughput | reward | resp_len |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 1（基线） | 12.01 s | 18.37 s | 521.6 | 0.0018 | 214.6 |
+| 2 | 6.68 s | 13.34 s | 724.8 | 0.0009 | 215.4 |
+| 4 | 3.67 s | 10.24 s | 939.9 | 0.0 | 213.3 |
+| **8** | **2.36 s** | **8.99 s** | **1084.0** | 0.0037 | 216.0 |
+
+**收益（mb=1 → mb=8）：`update_actor` -80.4%，step -51.1%，吞吐 +107.8%（翻倍），
+且无质量退化（reward 与 response 分布不变）。**
+
+**机理：** `ppo_micro_batch_size_per_gpu` 控制每张 trainer 卡一次前向/反向处理的样本数。
+mb=1 时每卡 8 样本切成 8 个微批串行执行，每批都要做 FSDP all-gather/reduce-scatter 和
+kernel launch；mb=8 时 8 样本一次并行，通信与启动开销摊薄到 1/8。0.6B 模型显存
+（峰值 ~5.9 GB / 卡）远未打满，mb=8 完全放得下。
+
+**对照：3+1 拓扑（trainer 3 卡 + rollout 1 卡）反而更慢。** 受 verl 整除约束
+（`train_batch_size × n` 必须能被 trainer 卡数整除）限制，3 卡只能配 batch=12
+（每卡 4 样本），比 2+2 的每卡 8 样本还少；且 rollout 减到 1 卡使权重同步变慢
+（2.6→4.0 s）。实测 step 18.37→21.16 s（+15%），吞吐 521.6→225.1（-57%，batch 不同
+不可直接比）。**结论：对 0.6B 小模型，加 trainer 卡不如加大 micro-batch——模型太小，
+数据并行摊薄不划算，通信开销反而变大。** 这与 4B（模型大、batch 大）适用 3+1 不同。
+
+## 8. 综合结论
 
 > "我在真实 GRPO 循环里测了四个 rollout 优化手段,结论是**它们都没有收益**。
 > 原因是这个负载的瓶颈根本不在 decode:0.6B + 短 prompt + 数学推理,vLLM rollout
 > 生成只占 step 的 19%,而 actor 更新占 65%、ref 前向占 20%。
 > 前缀缓存失效是因为 RL 每步权重更新让 KV cache 无法跨步复用;KV 量化无收益是因为
 > KV cache 太小不是瓶颈;ngram 投机无收益是因为数学推理的 token 几乎不可预测。
-> 这恰好证明了文档里的观点:rollout 优化手段只在'decode 是瓶颈'的负载下才有意义——
-> 大模型、长输出、高并发、可预测文本。我做实验前如果只看概念图,会以为加这些
-> 开关就能提速;实测数据告诉我先要量化瓶颈在哪。"
+> 然后我顺着'瓶颈是 actor 更新'去优化:把 `ppo_micro_batch_size_per_gpu` 从 1 调到 8,
+> `update_actor` 从 12 秒降到 2.4 秒、吞吐翻倍,而且质量没退化——因为 micro-batch 越大,
+> FSDP 通信和 kernel 启动开销摊得越薄。我还试了 3+1 拓扑,反而更慢,因为小模型加卡
+> 受整除约束、每卡样本反而变少。
+> 这组实验的教训是:先量化瓶颈在哪,再选优化手段——我在 rollout 上浪费的轮次,
+> 正是因为没有先看 timing 分解。"
 
 **对 4B 正式 run 的提示：** 4B 上 `update_actor`（~36s）和 `sync_rollout_weights`（~30s）
-才是最大项，下一步优化方向是 actor 更新 / 权重同步（如更小的 update bucket、async 权重
-传输、ref 与 actor 并行），而不是继续压 decode。
+才是最大项，与 0.6B 结论一致。micro-batch 扫描同样适用：4B 的
+`ppo_micro_batch_size_per_gpu=1` 很可能也是类似的开销来源（3 卡 batch=3，每卡 1 样本），
+下一步应做 4B 的 micro-batch 扫描（`=2` 或 `=3`），以及权重同步优化
+（`update_weights_bucket_megabytes`、async 权重传输）。
 
-## 8. 复现命令
+## 9. 复现命令
 
 基线（其余对照在基线上加一行参数）：
 ```bash
