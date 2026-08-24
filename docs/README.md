@@ -27,6 +27,7 @@
 ## 5. 学习：理解术语与算法
 
 - [RL / PPO / GRPO / DPO 速成](guides/rl-crash-course.md)。
+- [RL 论文阅读笔记](guides/rl-paper-notes/README.md)：13 篇论文速读（经典 RL → 对齐 → LLM 推理 RL），每篇只讲核心观点与重要创新。
 - [Rollout 优化:RL 里为什么生成最慢,以及怎么提速](guides/rollout-optimization.md):prefill/decode 负载差异、投机解码、量化、PD 分离与仓库实现对照。
 - [强化学习动画视频笔记](guides/rl-video-notes/README.md)：B 站「耿直哥」系列视频的中文学习笔记（TRPO / PPO / GRPO / DAPO / RLHF-DPO）。
 
