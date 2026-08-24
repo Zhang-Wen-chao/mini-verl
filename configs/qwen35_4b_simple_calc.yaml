@@ -1,0 +1,67 @@
+model_path: /mnt/storage01/zhangwenchao02/repos/mini-verl-l20/.official-verl/models/Qwen3.5-4B
+max_steps: 30
+bucket_size: 1.0e9
+val_before_train: False
+rollout_ratio: 0.5
+run_name: qwen35-4b-simple-calc-smoke
+project_name: agentrl-smoke
+save_path: /mnt/storage01/zhangwenchao02/repos/agentrl/outputs/ckpt/
+save_interval: 100000
+val_interval: 25
+rollout_stale_ratio: 0.25
+stale_step: 25
+task_adv_norm: True
+train:
+  batch_size: 8
+  concurrency: 32
+  n: 4
+val:
+  concurrency: 16
+  n: 2
+rollout:
+  tp_size: 1
+  server_args:
+    disable_cuda_graph: True
+  sampling_params:
+    temperature: 0.8
+    max_new_tokens: 256
+actor:
+  loss_reduce_mode: token-mean
+  max_tokens_per_micro_batch: 16384
+  max_ckpt_to_keep: 1
+  torch_dtype: bfloat16
+  enable_gradient_checkpointing: True
+  reshard_after_forward: False
+  model_input_keys:
+    - input_ids
+    - position_ids
+  optim:
+    lr: 1.0e-6
+    weight_decay: 0
+ref:
+  torch_dtype: bfloat16
+  reshard_after_forward: True
+loss:
+  temperature: 0.8
+  use_kl_loss: True
+  kl_loss_coef: 1.0e-4
+  clip_ratio: 0.2
+  clip_ratio_low: 0.2
+  clip_ratio_high: 0.2
+  clip_ratio_c: 3.0
+  entropy_coef: 0.0
+task:
+  base_url: http://localhost:5020/api
+  use_native_coroutine: True
+  incomplete_punishment: -0.2
+  max_total_len: 4096
+  max_turns: 5
+  train_tasks:
+    - simple-calculator
+  val_tasks:
+    - simple-calculator
+  loop_start_args:
+    - name
+    - index
+advantage:
+  adv_estimator: grpo
