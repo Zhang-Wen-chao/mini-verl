@@ -4,7 +4,8 @@
 `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/rollout-opt/`
 
 **结论状态：已固定（2026-08-24）。** 实验代码与本文档锁定于本机 mini-verl `main`
-commit `f9cbe69`；上游 verl snapshot `c4b389adadc58ce51cb2b63e70df497ca166d77f`；
+commit `75c5e50`（含 micro-batch 扫描）；上游 verl snapshot
+`c4b389adadc58ce51cb2b63e70df497ca166d77f`；
 运行时 `/tmp/official-verl-local-fsdp-vllm/venv`（torch 2.11.0 / transformers 5.5.3 /
 ray 2.55.1 / vllm 0.24.0 / verl 0.10.0.dev）。对照组实验全部跑满 16 steps，
 artifact 目录：`baseline-2plus2`、`prefix-cache`、`kv-fp8`、`spec-ngram5c`、
