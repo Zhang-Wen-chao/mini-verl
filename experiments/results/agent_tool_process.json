@@ -1,0 +1,237 @@
+{
+  "config": {
+    "model": ".official-verl/models/Qwen3-0.6B",
+    "data": ".official-verl/data/gsm8k-smoke/train.parquet",
+    "limit": 6,
+    "max_new_tokens": 512,
+    "iters": 20,
+    "group_size": 4,
+    "lr": 1e-06,
+    "mode": "tool",
+    "reward_version": "process",
+    "seed": 42,
+    "out": "/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/experiments/results/agent_tool_process.json"
+  },
+  "records": [
+    {
+      "iter": 0,
+      "mean_reward": 0.3333333333333333,
+      "loss": 0.052221049174174174,
+      "clip_fraction": 0.28460867117117117,
+      "mean_response_tokens": 346.875,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 157.46
+    },
+    {
+      "iter": 1,
+      "mean_reward": 0.375,
+      "loss": 0.015687035277153503,
+      "clip_fraction": 0.278877490967797,
+      "mean_response_tokens": 366.1666666666667,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 166.465
+    },
+    {
+      "iter": 2,
+      "mean_reward": 0.3541666666666667,
+      "loss": 0.013003801373493799,
+      "clip_fraction": 0.2806333078644127,
+      "mean_response_tokens": 356.1666666666667,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 160.295
+    },
+    {
+      "iter": 3,
+      "mean_reward": 0.375,
+      "loss": 0.012074752813141064,
+      "clip_fraction": 0.27971592366055265,
+      "mean_response_tokens": 345.2916666666667,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 156.969
+    },
+    {
+      "iter": 4,
+      "mean_reward": 0.3541666666666667,
+      "loss": 0.01313165394229611,
+      "clip_fraction": 0.2739892501656427,
+      "mean_response_tokens": 345.875,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 157.124
+    },
+    {
+      "iter": 5,
+      "mean_reward": 0.3541666666666667,
+      "loss": 0.046093191897844984,
+      "clip_fraction": 0.2711218411418026,
+      "mean_response_tokens": 349.9583333333333,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 158.277
+    },
+    {
+      "iter": 6,
+      "mean_reward": 0.375,
+      "loss": 0.0261197865755083,
+      "clip_fraction": 0.2773066237066891,
+      "mean_response_tokens": 346.3333333333333,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 156.22
+    },
+    {
+      "iter": 7,
+      "mean_reward": 0.3958333333333333,
+      "loss": 0.00943228024488304,
+      "clip_fraction": 0.28684484649122804,
+      "mean_response_tokens": 356.25,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 160.069
+    },
+    {
+      "iter": 8,
+      "mean_reward": 0.375,
+      "loss": 0.01359295798191153,
+      "clip_fraction": 0.2829282869290275,
+      "mean_response_tokens": 339.3333333333333,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 152.603
+    },
+    {
+      "iter": 9,
+      "mean_reward": 0.3958333333333333,
+      "loss": 0.021900245310529635,
+      "clip_fraction": 0.2663433214454603,
+      "mean_response_tokens": 330.4166666666667,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 148.482
+    },
+    {
+      "iter": 10,
+      "mean_reward": 0.3541666666666667,
+      "loss": 0.008120966998525074,
+      "clip_fraction": 0.2617547013274336,
+      "mean_response_tokens": 353.125,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 158.201
+    },
+    {
+      "iter": 11,
+      "mean_reward": 0.375,
+      "loss": 0.010939320501058176,
+      "clip_fraction": 0.2755517437409942,
+      "mean_response_tokens": 347.0,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 155.665
+    },
+    {
+      "iter": 12,
+      "mean_reward": 0.375,
+      "loss": 0.05258988132730188,
+      "clip_fraction": 0.28877351265460377,
+      "mean_response_tokens": 363.8333333333333,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 163.293
+    },
+    {
+      "iter": 13,
+      "mean_reward": 0.3958333333333333,
+      "loss": 0.012855065646568837,
+      "clip_fraction": 0.2750086370785487,
+      "mean_response_tokens": 341.0833333333333,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 153.44
+    },
+    {
+      "iter": 14,
+      "mean_reward": 0.2916666666666667,
+      "loss": 0.042411541540731144,
+      "clip_fraction": 0.2774930735463443,
+      "mean_response_tokens": 361.875,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 162.815
+    },
+    {
+      "iter": 15,
+      "mean_reward": 0.3125,
+      "loss": 0.04342154836301294,
+      "clip_fraction": 0.2850992181451167,
+      "mean_response_tokens": 376.7083333333333,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 170.502
+    },
+    {
+      "iter": 16,
+      "mean_reward": 0.3333333333333333,
+      "loss": 0.0,
+      "clip_fraction": 0.26747820031213704,
+      "mean_response_tokens": 358.75,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 162.25
+    },
+    {
+      "iter": 17,
+      "mean_reward": 0.3333333333333333,
+      "loss": 0.02660816859508664,
+      "clip_fraction": 0.307957988319807,
+      "mean_response_tokens": 379.9166666666667,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 171.364
+    },
+    {
+      "iter": 18,
+      "mean_reward": 0.3958333333333333,
+      "loss": 0.012749392795034328,
+      "clip_fraction": 0.26328863715068657,
+      "mean_response_tokens": 345.9166666666667,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 155.39
+    },
+    {
+      "iter": 19,
+      "mean_reward": 0.3333333333333333,
+      "loss": 0.03453719148559282,
+      "clip_fraction": 0.27158493741143125,
+      "mean_response_tokens": 352.8333333333333,
+      "tool_rate": 0.0,
+      "tool_success_rate": 0.0,
+      "mean_tool_calls": 0.0,
+      "seconds": 159.152
+    }
+  ]
+}
