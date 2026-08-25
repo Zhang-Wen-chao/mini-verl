@@ -309,10 +309,15 @@ main() {
   wait_for_formal_eval
   require_free_space
   start_v3_training
-  # The Ray job intentionally reserves only GPUs 1--3.  This runs in parallel
-  # on the otherwise unused inference GPU 0.
+  # The Ray job intentionally reserves only GPUs 1--3.  Monitor it from the
+  # moment it starts while GPU 0 independently runs the capacity ablation.
+  # `wait` propagates a failed checkpoint/status validation before v3 eval.
+  monitor_v3_training "$(< "$NIGHTLY_ROOT/v3-ray-job-id")" &
+  v3_monitor_pid=$!
   run_context16k
-  monitor_v3_training "$(< "$NIGHTLY_ROOT/v3-ray-job-id")"
+  if ! wait "$v3_monitor_pid"; then
+    fail "v3 training monitor failed; see $LOG_DIR/v3-status.log and FAILED"
+  fi
   run_v3_eval
   write_report
   printf 'completed_at=%s\n' "$(timestamp)" > "$NIGHTLY_ROOT/COMPLETED"
