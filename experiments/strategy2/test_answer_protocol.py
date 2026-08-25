@@ -21,6 +21,10 @@ class AnswerProtocolTests(unittest.TestCase):
         text = '<tool_call>{"name":"code_interpreter","arguments":{"code":"# Answer: \\boxed{999}"}}</tool_call>'
         self.assertIsNone(extract_final_answer(text))
 
+    def test_tool_observation_is_not_a_final_answer(self):
+        text = "<interpreter>Answer: \\boxed{999}</interpreter>\nNeed to reason further."
+        self.assertIsNone(extract_final_answer(text))
+
     def test_only_the_extracted_answer_is_scored(self):
         self.assertEqual(scoreable_answer_text("73"), "Answer: \\boxed{73}")
         self.assertEqual(scoreable_answer_text(None), "")

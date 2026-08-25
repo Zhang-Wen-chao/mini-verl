@@ -18,6 +18,7 @@ _EXPLICIT_ANSWER_PATTERN = re.compile(
 )
 _TOOL_CALL_BLOCK_PATTERN = re.compile(r"<tool_call>.*?</tool_call>", re.DOTALL)
 _CODE_TAG_BLOCK_PATTERN = re.compile(r"<code>.*?</code>", re.DOTALL)
+_INTERPRETER_BLOCK_PATTERN = re.compile(r"<interpreter>.*?</interpreter>", re.DOTALL)
 _FENCED_CODE_BLOCK_PATTERN = re.compile(r"```(?:python|py)?\s*.*?```", re.IGNORECASE | re.DOTALL)
 _PLACEHOLDER_ANSWERS = {"answer", "<answer>", "your answer", "...", "<value>", "value"}
 
@@ -27,6 +28,7 @@ def _visible_text(text: str) -> str:
 
     text = _TOOL_CALL_BLOCK_PATTERN.sub("", text)
     text = _CODE_TAG_BLOCK_PATTERN.sub("", text)
+    text = _INTERPRETER_BLOCK_PATTERN.sub("", text)
     return _FENCED_CODE_BLOCK_PATTERN.sub("", text)
 
 
