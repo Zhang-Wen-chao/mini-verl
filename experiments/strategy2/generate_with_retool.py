@@ -20,6 +20,7 @@ except ImportError as e:
 # Import tool sandbox functionality
 from tool_sandbox import SEMAPHORE, TOOL_CONFIGS, tool_registry
 from quality_reward import code_fingerprint, normalize_markdown_code, quality_process_score, tool_execution_succeeded
+from answer_protocol import extract_final_answer, scoreable_answer_text
 
 # Jinja2 template for tool-enabled conversations
 TOOL_TEMPLATE = """<|im_start|>system
@@ -97,15 +98,8 @@ def format_conversation_with_tools(
 
 def postprocess_predictions(prediction: str):
     """Extract action and content from prediction string"""
-    # Check for Answer: \boxed{...} format (only format we need for math_dapo)
-    # Use a more robust regex that handles nested braces
-    answer_pattern = r"Answer:\s*\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}"
-    answer_match = re.search(answer_pattern, prediction, re.DOTALL)
-    if answer_match:
-        content = answer_match.group(1).strip()
-        return "answer", content
-
-    # Then check for <tool_call> tags (new format from Jinja2 template)
+    # Structured tool actions take precedence.  A code comment may mention an
+    # answer, but it is not a submitted final answer.
     tool_call_pattern = r"<tool_call>\s*(\{.*?\})\s*</tool_call>"
     tool_call_match = re.search(tool_call_pattern, prediction, re.DOTALL)
     if tool_call_match:
@@ -142,6 +136,10 @@ def postprocess_predictions(prediction: str):
         content = python_code_match.group(1).strip()
         return "code", content
 
+    answer = extract_final_answer(prediction)
+    if answer is not None:
+        return "answer", answer
+
     return None, ""
 
 
@@ -165,15 +163,6 @@ def postprocess_responses(resp: str) -> str:
         # Find the last occurrence of ```python...```
         python_pattern = r"```python\s*.*?```"
         matches = list(re.finditer(python_pattern, resp, re.DOTALL))
-        if matches:
-            last_match = matches[-1]
-            return resp[: last_match.end()]
-
-    # Handle Answer: \boxed{...} format (only format we need for math_dapo)
-    if "Answer:" in resp and "\\boxed{" in resp:
-        # Find the last occurrence of Answer: \boxed{...} with nested braces support
-        answer_pattern = r"Answer:\s*\\boxed\{((?:[^{}]|\{[^{}]*\})*)\}"
-        matches = list(re.finditer(answer_pattern, resp, re.DOTALL))
         if matches:
             last_match = matches[-1]
             return resp[: last_match.end()]
@@ -216,8 +205,8 @@ async def execute_predictions(prediction: str) -> tuple[str, bool, str, str, boo
             "\nMy previous action is invalid. "
             "If I want to execute code, I should put the code between "
             "<code> and </code>. "
-            "If I want to give the final answer, I should use the format "
-            "'Answer: \\boxed{answer}'. Let me try again.\n"
+            "If I am done, I should submit one boxed final value and no tool call. "
+            "Let me try again.\n"
         )
         done = False
         outcome = "invalid_action"
@@ -465,8 +454,10 @@ async def reward_func(args, sample, **kwargs):
     # Get tool call count as num_turns
     num_turns = getattr(sample, "tool_call_count", 0)
 
-    # use \\boxed{...} answer
-    result = math_dapo_compute_score(solution_str, ground_truth, strict_box_verify=True)
+    # Score only the extracted final answer.  Scanning prompt + trajectory can
+    # accidentally treat recovery examples or code comments as an answer.
+    final_answer = extract_final_answer(sample.response)
+    result = math_dapo_compute_score(scoreable_answer_text(final_answer), ground_truth, strict_box_verify=True)
 
     if os.environ.get("QUALITY_PROCESS_REWARD"):
         result["score"] = quality_process_score(

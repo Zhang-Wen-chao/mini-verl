@@ -30,6 +30,7 @@ from generate_with_retool import (
     postprocess_predictions,
     postprocess_responses,
 )
+from answer_protocol import extract_final_answer, scoreable_answer_text
 from quality_reward import normalize_markdown_code
 from tool_sandbox import TOOL_CONFIGS, tool_registry
 
@@ -175,7 +176,7 @@ async def evaluate_one(
             response += (
                 "\nMy previous action is invalid. If I want to execute code, I should put the code "
                 "between <code> and </code>. If I want to give the final answer, I should use "
-                "the format 'Answer: \\boxed{answer}'. Let me try again.\n"
+                "one boxed final value and no tool call. Let me try again.\n"
             )
             continue
 
@@ -193,7 +194,8 @@ async def evaluate_one(
     else:
         terminal_status = "turn_limit"
 
-    result = compute_score(prompt + response, label, strict_box_verify=True)
+    final_answer = extract_final_answer(response)
+    result = compute_score(scoreable_answer_text(final_answer), label, strict_box_verify=True)
     prediction = str(result.get("pred") or "")
     score = float(result.get("score", 0.0))
     return EvaluationRecord(
