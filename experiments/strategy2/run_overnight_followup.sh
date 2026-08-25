@@ -193,6 +193,7 @@ write_report() {
   log "writing consolidated comparison report"
   python3 - "$SOURCE_ROOT" "$CONTEXT_ROOT" "$V3_EVAL_ROOT" "$REPORT" <<'PY'
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -219,6 +220,55 @@ def concise(data):
         "mean_response_tokens": data["mean_response_tokens"],
     }
 
+def records(root, arm):
+    path = root / "results" / arm / "records.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines() if line]
+
+def paired_correctness(reference_root, reference_arm, candidate_root, candidate_arm):
+    reference = records(reference_root, reference_arm)
+    candidate = records(candidate_root, candidate_arm)
+    if len(reference) != len(candidate):
+        raise ValueError(f"record count mismatch: {reference_arm} vs {candidate_arm}")
+    if [row["index"] for row in reference] != [row["index"] for row in candidate]:
+        raise ValueError(f"record index mismatch: {reference_arm} vs {candidate_arm}")
+    table = {
+        "both_correct": 0,
+        "candidate_only_correct": 0,
+        "reference_only_correct": 0,
+        "both_incorrect": 0,
+    }
+    candidate_wins = []
+    reference_wins = []
+    for ref, cand in zip(reference, candidate):
+        ref_ok, cand_ok = bool(ref["correct"]), bool(cand["correct"])
+        if ref_ok and cand_ok:
+            table["both_correct"] += 1
+        elif cand_ok:
+            table["candidate_only_correct"] += 1
+            candidate_wins.append(cand["index"])
+        elif ref_ok:
+            table["reference_only_correct"] += 1
+            reference_wins.append(ref["index"])
+        else:
+            table["both_incorrect"] += 1
+    discordant = table["candidate_only_correct"] + table["reference_only_correct"]
+    # Exact two-sided McNemar/binomial sign test, dependency-free.  It is
+    # descriptive with n=30, not a substitute for an independent rerun.
+    smaller_tail = min(table["candidate_only_correct"], table["reference_only_correct"])
+    exact_p = (
+        min(1.0, 2.0 * sum(math.comb(discordant, k) for k in range(smaller_tail + 1)) / (2**discordant))
+        if discordant else 1.0
+    )
+    return {
+        "reference_arm": reference_arm,
+        "candidate_arm": candidate_arm,
+        "correct_count_delta": table["candidate_only_correct"] - table["reference_only_correct"],
+        "table": table,
+        "candidate_only_correct_indices": candidate_wins,
+        "reference_only_correct_indices": reference_wins,
+        "exact_two_sided_mcnemar_p": exact_p,
+    }
+
 arms = ("base", "outcome_reward", "process_reward", "quality_process_reward_v2")
 report = {
     "protocol": {
@@ -233,6 +283,15 @@ report = {
     "16k_context_capacity_ablation": {arm: concise(summary(context_root, arm)) for arm in arms},
     "8k_v3_repaired_quality_reward": {
         arm: concise(summary(v3_root, arm)) for arm in ("base", "quality_process_reward_v3")
+    },
+    "paired_correctness": {
+        "8k_protocol_fix_vs_base": {
+            arm: paired_correctness(formal_root, "base", formal_root, arm) for arm in arms if arm != "base"
+        },
+        "16k_context_vs_8k_same_checkpoint": {
+            arm: paired_correctness(formal_root, arm, context_root, arm) for arm in arms
+        },
+        "8k_v3_vs_base": paired_correctness(v3_root, "base", v3_root, "quality_process_reward_v3"),
     },
     "notes": [
         "The 16K run is a capacity ablation of the existing checkpoints, not a replacement for the 8K formal protocol.",
