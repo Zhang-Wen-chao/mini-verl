@@ -204,9 +204,9 @@ def summary(root, arm):
 
 def concise(data):
     status = data["terminal_status_counts"]
-    total = data["total"]
+    total = data["problem_count"]
     return {
-        "correct": data["correct"],
+        "correct": data["correct_count"],
         "total": total,
         "accuracy": data["accuracy"],
         "answer_terminal_rate": status.get("answer", 0) / total,
