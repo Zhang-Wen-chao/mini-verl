@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Read-only evaluation of Strategy 2 checkpoints on held-out AIME-2024.
+# Read-only evaluation of all Strategy 2 arms on held-out AIME-2024.
 # Run inside the slime-dev container; it never updates the source checkpoints.
 # The evaluator reports Markdown-fence normalization independently, so a
 # recoverable formatting drift is not confused with a sandbox rejection.  This
-# launcher evaluates a capability-tolerant mode; omit its final normalization
-# flag to reproduce the strict training protocol.
+# launcher evaluates a capability-tolerant mode that matches the repaired
+# v2 tool protocol. It never edits source checkpoints.
 set -euo pipefail
 
 BASE=/mnt/storage01/zhangwenchao02
@@ -18,6 +18,9 @@ MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-4096}
 MAX_TURNS=${MAX_TURNS:-16}
 TEMPERATURE=${TEMPERATURE:-0.0}
 TOOL_TIMEOUT_SECONDS=${TOOL_TIMEOUT_SECONDS:-20}
+# Space-separated trained arms to convert and evaluate. Base is always the
+# original HF model and is evaluated first.
+CHECKPOINT_ARMS=${CHECKPOINT_ARMS:-"outcome_reward process_reward quality_process_reward_v2"}
 
 mkdir -p "$RUN_ROOT/models" "$RUN_ROOT/results"
 
@@ -51,10 +54,10 @@ run_eval() {
 }
 
 run_eval base "$ORIGIN_HF"
-convert_checkpoint outcome_reward
-run_eval outcome_reward "$RUN_ROOT/models/outcome_reward-hf"
-convert_checkpoint process_reward
-run_eval process_reward "$RUN_ROOT/models/process_reward-hf"
+for arm in $CHECKPOINT_ARMS; do
+  convert_checkpoint "$arm"
+  run_eval "$arm" "$RUN_ROOT/models/$arm-hf"
+done
 
 python3 - "$RUN_ROOT" <<'PY'
 import json
