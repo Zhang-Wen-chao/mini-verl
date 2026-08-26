@@ -115,10 +115,23 @@ start_v3_training() {
     bash reward_compare.sh
   " 2>&1) || { printf '%s\n' "$output"; fail "v3 job submission failed"; }
   printf '%s\n' "$output" | tee "$LOG_DIR/v3-submit.log"
-  job_id=$(printf '%s\n' "$output" | sed -nE 's/.*Job submission id: ([[:alnum:]_-]+).*/\1/p' | tail -1)
+  # Ray CLI output changed from "Job submission id: ..." to
+  # "Job 'raysubmit_...' submitted successfully". Accept both formats so a
+  # successful submission never prevents the evaluation handoff.
+  job_id=$(printf '%s\n' "$output" | sed -nE \
+    -e 's/.*Job submission id: ([[:alnum:]_-]+).*/\1/p' \
+    -e "s/.*Job '([[:alnum:]_-]+)' submitted successfully.*/\\1/p" | tail -1)
   [[ -n "$job_id" ]] || fail "could not parse Ray job id from v3 submission"
   printf '%s\n' "$job_id" > "$NIGHTLY_ROOT/v3-ray-job-id"
   log "v3 Ray job id: $job_id"
+}
+
+v3_checkpoint_complete() {
+  local ckpt="$BASE/retool-rl-smoke/$ARM_V3/ckpt/iter_0000019"
+  local shard_count
+  [[ -s "$ckpt/common.pt" && -s "$ckpt/.metadata" ]] || return 1
+  shard_count=$(find "$ckpt" -maxdepth 1 -name '*.distcp' -type f -size +1G | wc -l)
+  (( shard_count >= 4 ))
 }
 
 monitor_v3_training() {
@@ -151,11 +164,13 @@ monitor_v3_training() {
 
 run_context16k() {
   local arms=(base outcome_reward process_reward quality_process_reward_v2)
+  local gpu=${CONTEXT_EVAL_GPU:-0}
   require_free_space
-  log "starting 16K context capacity ablation on GPU 0, sequentially"
+  log "starting 16K context capacity ablation on GPU $gpu, sequentially"
   nerdctl exec -w / "$CONTAINER" bash -lc "
     cd '$SCRIPT_DIR' &&
     RUN_ROOT='$CONTEXT_ROOT' \\
+    EVAL_CUDA_VISIBLE_DEVICES='$gpu' \\
     MAX_PROBLEMS=30 \\
     MAX_NEW_TOKENS=1024 \\
     MAX_CONTEXT_TOKENS=16384 \\
@@ -171,11 +186,13 @@ run_context16k() {
 
 run_v3_eval() {
   local arms=(base "$ARM_V3")
+  local gpu=${V3_EVAL_GPU:-1}
   require_free_space
-  log "starting v3 evaluation with the formal 8K protocol on GPU 0"
+  log "starting v3 evaluation with the formal 8K protocol on GPU $gpu"
   nerdctl exec -w / "$CONTAINER" bash -lc "
     cd '$SCRIPT_DIR' &&
     RUN_ROOT='$V3_EVAL_ROOT' \\
+    EVAL_CUDA_VISIBLE_DEVICES='$gpu' \\
     MAX_PROBLEMS=30 \\
     MAX_NEW_TOKENS=1024 \\
     MAX_CONTEXT_TOKENS=8192 \\
@@ -305,20 +322,46 @@ PY
 }
 
 main() {
+  # A prior failed attempt can be resumed only when explicitly requested. Keep
+  # its reason for audit, but do not let an obsolete marker block a verified
+  # checkpoint from reaching its held-out evaluation.
+  if [[ -e "$NIGHTLY_ROOT/FAILED" ]]; then
+    [[ "${RESUME_FAILED:-}" = "1" ]] || fail "existing FAILED marker; rerun with RESUME_FAILED=1 after inspection"
+    mv "$NIGHTLY_ROOT/FAILED" "$NIGHTLY_ROOT/FAILED.previous.$(date +%Y%m%dT%H%M%S)"
+    log "archived prior failure marker before explicit resume"
+  fi
   printf 'started_at=%s\nsource_root=%s\n' "$(timestamp)" "$SOURCE_ROOT" > "$NIGHTLY_ROOT/RUN_INFO.txt"
   wait_for_formal_eval
   require_free_space
-  start_v3_training
-  # The Ray job intentionally reserves only GPUs 1--3.  Monitor it from the
-  # moment it starts while GPU 0 independently runs the capacity ablation.
-  # `wait` propagates a failed checkpoint/status validation before v3 eval.
-  monitor_v3_training "$(< "$NIGHTLY_ROOT/v3-ray-job-id")" &
-  v3_monitor_pid=$!
-  run_context16k
-  if ! wait "$v3_monitor_pid"; then
-    fail "v3 training monitor failed; see $LOG_DIR/v3-status.log and FAILED"
+  if v3_checkpoint_complete; then
+    log "reusing the verified existing $ARM_V3 checkpoint"
+    # The completed v3 checkpoint requires no Ray GPUs. Use two independent
+    # inference GPUs to finish both held-out evaluations without rerunning
+    # training or sharing a model scratch directory.
+    run_context16k &
+    context_pid=$!
+    run_v3_eval &
+    v3_eval_pid=$!
+    if ! wait "$context_pid"; then
+      kill "$v3_eval_pid" 2>/dev/null || true
+      wait "$v3_eval_pid" || true
+      fail "16K context evaluation failed; v3 evaluation was stopped"
+    fi
+    if ! wait "$v3_eval_pid"; then
+      fail "v3 8K evaluation failed"
+    fi
+  else
+    start_v3_training
+    # The Ray job intentionally reserves only GPUs 1--3. Monitor it from the
+    # moment it starts while GPU 0 independently runs the capacity ablation.
+    monitor_v3_training "$(< "$NIGHTLY_ROOT/v3-ray-job-id")" &
+    v3_monitor_pid=$!
+    run_context16k
+    if ! wait "$v3_monitor_pid"; then
+      fail "v3 training monitor failed; see $LOG_DIR/v3-status.log and FAILED"
+    fi
+    run_v3_eval
   fi
-  run_v3_eval
   write_report
   printf 'completed_at=%s\n' "$(timestamp)" > "$NIGHTLY_ROOT/COMPLETED"
   log "overnight follow-up complete"

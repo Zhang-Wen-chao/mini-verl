@@ -18,6 +18,7 @@ MAX_CONTEXT_TOKENS=${MAX_CONTEXT_TOKENS:-4096}
 MAX_TURNS=${MAX_TURNS:-16}
 TEMPERATURE=${TEMPERATURE:-0.0}
 TOOL_TIMEOUT_SECONDS=${TOOL_TIMEOUT_SECONDS:-20}
+EVAL_CUDA_VISIBLE_DEVICES=${EVAL_CUDA_VISIBLE_DEVICES:-0}
 # Space-separated trained arms to convert and evaluate. Base is always the
 # original HF model and is evaluated first.
 CHECKPOINT_ARMS=${CHECKPOINT_ARMS:-"outcome_reward process_reward quality_process_reward_v2"}
@@ -38,7 +39,7 @@ convert_checkpoint() {
 run_eval() {
   local name=$1
   local model=$2
-  PYTHONPATH=$SCRIPT_DIR:/root/slime CUDA_VISIBLE_DEVICES=0 \
+  PYTHONPATH=$SCRIPT_DIR:/root/slime CUDA_VISIBLE_DEVICES=$EVAL_CUDA_VISIBLE_DEVICES \
     python3 $SCRIPT_DIR/evaluate_retool.py \
       --model "$model" \
       --data "$DATA" \
