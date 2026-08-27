@@ -34,11 +34,15 @@
 ## 落地步骤
 
 1. ✅ 确认 verl 有 agent_loop 支持
-2. ⏳ 读 gsm8k_tool_agent_loop.py 数据脚本，生成工具调用训练数据
-3. ⏳ 找 verl 的 agent 训练入口（main_ppo + agent 配置 / 或教程示例）
-4. ⏳ 用 Qwen3-0.6B 跑通 agent GRPO smoke（几十步）
-5. ⏳ 换 Qwen3.5-4B 跑正式 agent RL
-6. ⏳ 评测 + 记录 + 提交
+2. ✅ 评估官方 agent-loop 路径与现有环境，确认采用 Strategy 2 的 retool 工具协议
+3. ✅ 完成多轮 rollout、答案解析、tool observation 隔离和 recovery prompt 的评测协议
+4. ✅ 用 Qwen3-0.6B 完成 agent GRPO smoke 与早期 reward/stability 对照
+5. ✅ 用 Qwen3-4B 完成 Strategy 2 的 outcome/process/quality-process reward 训练与 checkpoint staging
+6. ✅ 完成 8K 四策略、16K 容量消融和修复协议后的 v3 paired held-out 评测，结果记录在 [`experiments/strategy2/final_eval_report.md`](experiments/strategy2/final_eval_report.md)
+
+## 最终状态（2026-08-27）
+
+本分支的 Strategy 2 follow-up 已完成。远端四张 L20 已释放，所有评测 arm 均有 30 条逐题记录和汇总文件。最终没有统计显著的 reward winner；v2 的主要问题是工具调用和无效动作增加、答案终止率下降，v3 修复协议后只出现未经显著性验证的净增 1 题信号。后续若继续，优先做独立 seed 和更大 held-out，而不是直接延长当前 checkpoint 的训练。
 
 ## 教训（追加到 lessons-learned）
 
