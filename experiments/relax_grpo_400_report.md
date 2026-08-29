@@ -55,20 +55,40 @@ bootstrap 差值为 +5.83 个百分点，95% 区间 [1.25, 11.25]。这增强了
 的证据，但两个 seed 共享题目和同一个训练 checkpoint，不能替代独立训练 seed 或
 更大的 held-out 集。
 
+### 8192-token 长度消融（两个解码 seed）
+
+4096 下仍有超过 60% 的回答截断，因此再把唯一变量 `eval-max-response-len`
+放宽到 8192：
+
+| seed | 模型 | 正确样本 | 单样本准确率 | pass@8 | 截断率 |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 20260829 | base | 28/240 | 11.67% | 46.67% (14/30) | 34.58% |
+| 20260829 | iter 399 | 52/240 | 21.67% | 63.33% (19/30) | 30.83% |
+| 20260830 | base | 24/240 | 10.00% | 43.33% (13/30) | 33.75% |
+| 20260830 | iter 399 | 47/240 | 19.58% | 60.00% (18/30) | 27.92% |
+
+两个 seed 合计，base 为 52/480（10.83%），iter 399 为 99/480（20.63%），
+净增 9.79 个百分点；以 prompt 聚类的探索性 bootstrap 95% 区间为
+[3.75, 16.67] 个百分点。两个 seed 的逐题方向均为 12 题提升、15 题持平、
+3 题退化。放宽长度后，base 和 iter 399 都提升，而二者差距没有消失，说明
+GRPO 的正向信号不能仅用“训练后更少截断”解释；但 8192 下仍有约 28%--35%
+截断，长度仍是显著混杂因素。
+
 ## 3. 结论与边界
 
 1. 工程结论成立：400 rollout 的生成、规则奖励、组相对 advantage、策略更新、KL、TIS、权重同步和 checkpoint 保存均真实完成。
-2. 能力结论是正向但有限：399-step 在 2048 和两个 4096 解码 seed 下都超过 base 的单样本准确率；4096 两个 seed 合计从 7.71% 提升到 13.54%。
+2. 能力结论是正向且跨预算/解码 seed 一致：399-step 在 2048、4096 和 8192 下都超过 base；两个 8192 seed 合计从 10.83% 提升到 20.63%。
 3. 2048 不是充分的能力评测预算。同一 base 放宽到 4096 后 pass@8 从 13.33% 变为 36.67%，说明长度截断是主要瓶颈。
-4. 提升仍集中在少数题目。30 题、两个解码 seed、单一训练 seed 和 checkpoint 仍不足以宣称稳定泛化，也没有证明某个更好的训练配方。
+4. 8192 的提升覆盖更多题，但证据仍只有 30 题、两个解码 seed、单一训练 seed 和 checkpoint，不足以宣称稳定泛化或证明最优训练配方。
 5. 这条线是数学题 GRPO，不是工具型 Agent RL；没有多轮 action -> tool -> observation 环境，也不能用来证明过程奖励有效。
 
-## 4. 后续实验优先级
+## 4. 已完成补测与下一步
 
 1. 已补测 `iter_0000199`（4096）：20/240（8.33%）、pass@8 9/30（30.00%）、截断率 60.00%。它没有超过 base 的 pass@8（11/30），也明显低于 `iter_0000399`（33/240、14/30），当前不支持 19-step 早停。
-2. 固定评测协议增加独立解码 seed，并扩大 held-out 数量；同时报告准确率、pass@8、截断率和有效答案率。
-3. 下一轮训练把“正确终止、长度预算、无效/重复动作”纳入 reward 或采样过滤，验证是否能减少当前约 65% 的 4096 截断。
-4. Agent RL 结论继续使用 Strategy 2 的工具型实验单独验证，不与本报告的数学 GRPO 数字混合。
+2. 已完成第二解码 seed 和 8192-token 消融，正向方向均复现；8192 仍有约 28%--35% 截断。
+3. 下一优先级是扩大 held-out 题集并做独立训练 seed；解码 seed 不能替代训练复现。
+4. 新训练配方应显式约束长度与正确终止，再对 accuracy、pass@8、截断率和 token 成本做联合验收。
+5. Agent RL 结论继续使用 Strategy 2 的工具型实验单独验证，不与本报告的数学 GRPO 数字混合。
 
 原始评测 JSONL：
 
@@ -76,6 +96,8 @@ bootstrap 差值为 +5.83 个百分点，95% 区间 [1.25, 11.25]。这增强了
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096/{base,iter_0000399}/eval/0.jsonl`
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096/iter_0000199/eval/0.jsonl`
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096_seed20260830/{base,iter_0000399}/eval/0.jsonl`
+- `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_8192/{base,iter_0000399}/eval/0.jsonl`
+- `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_8192_seed20260830/{base,iter_0000399}/eval/0.jsonl`
 
 补充评测可用 `experiments/run_relax_grpo_eval.sh` 复现。该脚本启用 Relax 的
 `--debug-rollout-only`，只加载 HF 权重进行生成和 DAPO 评分，不创建 actor 或更新参数。
