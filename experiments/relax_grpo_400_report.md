@@ -33,16 +33,34 @@
 | 模型 | 正确样本 | 单样本准确率 | pass@8 | 截断率 |
 | --- | ---: | ---: | ---: | ---: |
 | base | 16/240 | 6.67% | 36.67% (11/30) | 69.17% |
+| iter 19 | 20/240 | 8.33% | 30.00% (9/30) | 60.00% |
 | iter 399 | 33/240 | 13.75% | 46.67% (14/30) | 65.42% |
 
 4096-token 逐题配对：12 题提升、17 题持平、1 题退化；每题正确样本比例净增 7.08 个百分点。以 30 题为 bootstrap 单位的探索性 95% 区间为 [3.33, 11.25] 个百分点；这不是多 seed 的显著性结论。
 
+### 4096-token 独立解码 seed 复现
+
+保持 checkpoint、题集和采样协议不变，仅把 rollout seed 从 `20260829` 改为
+`20260830`：
+
+| 模型 | 正确样本 | 单样本准确率 | pass@8 | 截断率 |
+| --- | ---: | ---: | ---: | ---: |
+| base | 21/240 | 8.75% | 33.33% (10/30) | 69.17% |
+| iter 399 | 32/240 | 13.33% | 36.67% (11/30) | 62.50% |
+
+第二个 seed 中逐题正确样本比例为 7 题提升、19 题持平、4 题退化，净增 4.58
+个百分点。两个解码 seed 合并后，base 为 37/480（7.71%），iter 399 为
+65/480（13.54%）；以 30 道 prompt 为聚类单位、先对两个 seed 求平均的探索性
+bootstrap 差值为 +5.83 个百分点，95% 区间 [1.25, 11.25]。这增强了“方向可复现”
+的证据，但两个 seed 共享题目和同一个训练 checkpoint，不能替代独立训练 seed 或
+更大的 held-out 集。
+
 ## 3. 结论与边界
 
 1. 工程结论成立：400 rollout 的生成、规则奖励、组相对 advantage、策略更新、KL、TIS、权重同步和 checkpoint 保存均真实完成。
-2. 能力结论是正向但有限：399-step 在 2048 和 4096 两个预算下都超过 base；4096 下准确率从 6.67% 到 13.75%，pass@8 从 36.67% 到 46.67%。
+2. 能力结论是正向但有限：399-step 在 2048 和两个 4096 解码 seed 下都超过 base 的单样本准确率；4096 两个 seed 合计从 7.71% 提升到 13.54%。
 3. 2048 不是充分的能力评测预算。同一 base 放宽到 4096 后 pass@8 从 13.33% 变为 36.67%，说明长度截断是主要瓶颈。
-4. 提升集中在少数题目，30 题、单 seed、8 samples/prompt 仍不足以宣称稳定泛化，也没有证明某个更好的训练配方。
+4. 提升仍集中在少数题目。30 题、两个解码 seed、单一训练 seed 和 checkpoint 仍不足以宣称稳定泛化，也没有证明某个更好的训练配方。
 5. 这条线是数学题 GRPO，不是工具型 Agent RL；没有多轮 action -> tool -> observation 环境，也不能用来证明过程奖励有效。
 
 ## 4. 后续实验优先级
@@ -57,6 +75,7 @@
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results/{base,iter_0000199,iter_0000399}/eval/0.jsonl`
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096/{base,iter_0000399}/eval/0.jsonl`
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096/iter_0000199/eval/0.jsonl`
+- `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096_seed20260830/{base,iter_0000399}/eval/0.jsonl`
 
 补充评测可用 `experiments/run_relax_grpo_eval.sh` 复现。该脚本启用 Relax 的
 `--debug-rollout-only`，只加载 HF 权重进行生成和 DAPO 评分，不创建 actor 或更新参数。
