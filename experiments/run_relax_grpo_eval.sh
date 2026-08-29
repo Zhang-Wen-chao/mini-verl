@@ -11,6 +11,7 @@ NAME=${NAME:?NAME identifies this evaluation arm}
 OUTPUT_ROOT=${OUTPUT_ROOT:-$BASE/evals/relax-qwen3-4b-400-20260829/results_4096}
 MAX_RESPONSE_LEN=${MAX_RESPONSE_LEN:-4096}
 ROLLOUT_SEED=${ROLLOUT_SEED:-20260829}
+SERVE_PORT=${SERVE_PORT:-18080}
 
 TRAIN_DATA=$BASE/data/dapo-math-17k/dapo-math-17k.jsonl
 EVAL_DATA=$BASE/data/aime-2024/aime-2024.jsonl
@@ -19,11 +20,11 @@ LOG_DIR=$OUTPUT_ROOT/logs
 
 mkdir -p "$RESULT_DIR" "$LOG_DIR"
 
-runtime_env=$(python3 - "$RELAX_ROOT" "$MEGATRON_ROOT" <<'PY'
+runtime_env=$(python3 - "$RELAX_ROOT" "$MEGATRON_ROOT" "$SERVE_PORT" <<'PY'
 import json
 import sys
 
-relax_root, megatron_root = sys.argv[1:]
+relax_root, megatron_root, serve_port = sys.argv[1:]
 print(json.dumps({
     "env_vars": {
         "PYTHONUNBUFFERED": "1",
@@ -34,6 +35,7 @@ print(json.dumps({
         "MKL_NUM_THREADS": "16",
         "OPENBLAS_NUM_THREADS": "16",
         "NCCL_NVLS_ENABLE": "0",
+        "RELAX_SERVE_PORT": serve_port,
     }
 }))
 PY
