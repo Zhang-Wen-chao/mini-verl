@@ -47,7 +47,7 @@
 
 ## 4. 后续实验优先级
 
-1. 在 4096（或带长度惩罚的 2048）下测 `iter_0000199`，确定早停点是否优于 399-step。
+1. 已补测 `iter_0000199`（4096）：20/240（8.33%）、pass@8 9/30（30.00%）、截断率 60.00%。它没有超过 base 的 pass@8（11/30），也明显低于 `iter_0000399`（33/240、14/30），当前不支持 19-step 早停。
 2. 固定评测协议增加独立解码 seed，并扩大 held-out 数量；同时报告准确率、pass@8、截断率和有效答案率。
 3. 下一轮训练把“正确终止、长度预算、无效/重复动作”纳入 reward 或采样过滤，验证是否能减少当前约 65% 的 4096 截断。
 4. Agent RL 结论继续使用 Strategy 2 的工具型实验单独验证，不与本报告的数学 GRPO 数字混合。
@@ -56,6 +56,7 @@
 
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results/{base,iter_0000199,iter_0000399}/eval/0.jsonl`
 - `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096/{base,iter_0000399}/eval/0.jsonl`
+- `/mnt/storage01/zhangwenchao02/evals/relax-qwen3-4b-400-20260829/results_4096/iter_0000199/eval/0.jsonl`
 
 补充评测可用 `experiments/run_relax_grpo_eval.sh` 复现。该脚本启用 Relax 的
 `--debug-rollout-only`，只加载 HF 权重进行生成和 DAPO 评分，不创建 actor 或更新参数。
