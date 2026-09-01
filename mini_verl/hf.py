@@ -12,8 +12,10 @@ from dataclasses import dataclass, field
 from time import perf_counter
 from typing import Any
 
+from .algorithms.dpo import torch_dpo_loss
 from .algorithms.grpo import torch_grpo_loss
 from .batching import PackedTrajectoryBatch, sequence_length, length_bucket_batches
+from .preference import PreferencePair, preference_pairs
 from .protocol import Trajectory, TrajectoryBatch, TrajectoryValidationError
 from .tensors import response_logprobs_from_logits
 
@@ -650,4 +652,99 @@ class HuggingFaceTrainerWorker:
         max_padded_tokens = self.train_max_padded_tokens or max_batch_size * max_length
         return length_bucket_batches(
             trajectories, max_batch_size=max_batch_size, max_padded_tokens=max_padded_tokens
+        )
+
+
+@dataclass(slots=True)
+class HuggingFaceDpoTrainerWorker:
+    """Run one DPO update over preference pairs built from scored trajectories.
+
+    Pairs are constructed online by `preference_pairs`: within each prompt
+    group, the highest-reward response is chosen and the lowest-reward response
+    is rejected.  Unlike the GRPO trainer, advantages and `old_logprobs` are
+    deliberately unused — DPO compares the policy against the frozen reference
+    model on both members of every pair, so `reference_model` is required.
+    Each micro-loss is weighted by its pair count so the result preserves the
+    full-batch pair-mean DPO objective, and exactly one optimizer step runs for
+    the caller's logical batch.
+    """
+
+    model: Any
+    optimizer: Any
+    pad_token_id: int
+    reference_model: Any
+    beta: float = 0.1
+    length_normalize: bool = False
+    train_micro_batch_size: int | None = None
+
+    def __post_init__(self) -> None:
+        if self.reference_model is None:
+            raise ValueError("DPO requires a frozen reference model")
+        if not self.beta > 0:
+            raise ValueError("beta must be positive")
+        if self.train_micro_batch_size is not None and self.train_micro_batch_size <= 0:
+            raise ValueError("train_micro_batch_size must be positive when set")
+        self.reference_model.eval()
+        for parameter in self.reference_model.parameters():
+            parameter.requires_grad_(False)
+
+    def train(self, batch: TrajectoryBatch, *, learner_policy_version: int) -> Mapping[str, float]:
+        torch = _torch()
+        if learner_policy_version < 0:
+            raise ValueError("learner_policy_version must be non-negative")
+        if len(batch.policy_versions) != 1:
+            raise TrajectoryValidationError("trainer requires one rollout policy version per batch")
+        pairs = preference_pairs(batch)
+        if not pairs:
+            raise ValueError("batch must contain at least one valid preference pair")
+        device = next(self.model.parameters()).device
+        reference_device = next(self.reference_model.parameters()).device
+        if reference_device != device:
+            raise ValueError("policy and reference model must be on the same device in this backend")
+        self.model.train()
+        pair_batches = self._pair_batches(pairs)
+        self.optimizer.zero_grad(set_to_none=True)
+        total_loss_sum = 0.0
+        metric_sums: dict[str, float] = {}
+        for pair_batch in pair_batches:
+            micro_pair_count = len(pair_batch)
+            micro_batch = TrajectoryBatch(
+                tuple(pair.chosen for pair in pair_batch) + tuple(pair.rejected for pair in pair_batch)
+            )
+            inputs = causal_lm_inputs(micro_batch, pad_token_id=self.pad_token_id, device=device)
+            logits = self.model(input_ids=inputs.input_ids, attention_mask=inputs.attention_mask).logits
+            policy_scores = response_logprobs_from_logits(logits, micro_batch)
+            with torch.inference_mode():
+                reference_logits = self.reference_model(
+                    input_ids=inputs.input_ids, attention_mask=inputs.attention_mask
+                ).logits
+                reference_scores = response_logprobs_from_logits(reference_logits, micro_batch)
+            loss, metrics = torch_dpo_loss(
+                policy_scores.values,
+                reference_scores.values,
+                policy_scores.mask,
+                beta=self.beta,
+                length_normalize=self.length_normalize,
+            )
+            (loss * (micro_pair_count / len(pairs))).backward()
+            total_loss_sum += float(loss.detach().item()) * micro_pair_count
+            for key, value in metrics.items():
+                if key != "pair_count":
+                    metric_sums[key] = metric_sums.get(key, 0.0) + float(value.item()) * micro_pair_count
+        self.optimizer.step()
+        aggregate = {key: value / len(pairs) for key, value in metric_sums.items()}
+        return {
+            "loss": total_loss_sum / len(pairs),
+            **aggregate,
+            "pair_count": float(len(pairs)),
+            "train_microbatch_count": float(len(pair_batches)),
+        }
+
+    def _pair_batches(self, pairs: tuple[PreferencePair, ...]) -> tuple[tuple[PreferencePair, ...], ...]:
+        """Split pairs into deterministic micro-batches of at most `train_micro_batch_size` pairs."""
+        if self.train_micro_batch_size is None:
+            return (pairs,)
+        return tuple(
+            pairs[index : index + self.train_micro_batch_size]
+            for index in range(0, len(pairs), self.train_micro_batch_size)
         )

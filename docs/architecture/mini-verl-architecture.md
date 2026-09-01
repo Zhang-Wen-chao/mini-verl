@@ -89,6 +89,12 @@ RolloutWorker (actor policy v_k) -- trajectories --> RewardWorker
 - [x] PPO 教学对照：`mini_verl/algorithms/ppo.py` 与 `examples/toy_ppo_train.py` 在同一
   categorical 环境中实现 Critic、GAE、clipped actor objective 与 value loss；它用于解释
   PPO 和 GRPO 的 advantage 差异，不是多 token、分布式 LLM PPO。
+- [x] DPO 在线偏好闭环：`mini_verl/algorithms/dpo.py`（`-log σ(β·margin)` 序列级目标的
+  reference/torch 双实现对拍）、`mini_verl/preference.py`（每个 prompt 组内按规则 reward
+  取最高/最低构造 chosen/rejected 的纯函数）与 `mini_verl/hf.py` 的
+  `HuggingFaceDpoTrainerWorker`（reference model 必填、忽略 advantage/old_logprobs、
+  pair 级 micro-batch 加权、单次 optimizer step）。它借 RL 循环的采样来构造偏好对，
+  但更新本身没有 advantage、critic 或 ratio clip；离线偏好数据集加载未做。
 - [ ] 将教学 PPO 扩展为 mini_verl 的多 token/distributed Critic 路径。真实 4B PPO/GAE 的
   工程可行性与资源对照已记录在
   [official_verl runlog](../../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md)。
@@ -105,6 +111,8 @@ mini-verl/
 │   ├── hf.py             # Hugging Face rollout / trainer backend
 │   ├── reward.py         # rule / model reward
 │   ├── algorithms/grpo.py
+│   ├── algorithms/dpo.py   # DPO 序列级偏好目标(reference + torch 双实现)
+│   ├── preference.py       # 组内规则 reward 的偏好对构造
 │   ├── workers.py
 │   ├── controller.py
 │   ├── distributed.py

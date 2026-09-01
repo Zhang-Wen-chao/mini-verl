@@ -24,4 +24,13 @@
 
 ## mini-verl 的转化
 
-本仓库聚焦在线 RL（GRPO），未实现 DPO。面试被问"GRPO 和 DPO 区别"时答：**DPO 连 RL 循环都不要，直接偏好对一步优化；GRPO 还在 RL 框架里在线采样。**（面试详稿 §7 有退路话术。）
+`mini_verl` 现已实现在线版 DPO 闭环：`preference.py` 在每个 prompt 组内用规则 reward 取
+最高/最低分构造 chosen/rejected 偏好对，`algorithms/dpo.py` 提供序列级
+`-log σ(β·margin)` 目标的 reference/torch 双实现，`HuggingFaceDpoTrainerWorker` 复用
+GRPO 的 rollout/reward 阶段做更新，Controller 零改动。这是"在线 DPO"的配对来源
+（偏好对来自采样+打分，不是人工标注），更新本身没有 advantage、critic 和 ratio clip；
+离线偏好数据集加载与 KTO 仍未做。
+
+面试被问"GRPO 和 DPO 区别"时答：**DPO 可以连 RL 循环都不要，直接在偏好对上一步优化；
+GRPO 在 RL 框架里在线采样、组内相对比较。** mini-verl 的 DPO 借用了 RL 循环的采样来
+构造偏好对，但优化目标就是纯 DPO。（面试详稿 §7 有退路话术。）

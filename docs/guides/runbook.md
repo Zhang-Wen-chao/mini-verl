@@ -2,7 +2,8 @@
 
 ## Local, no ML dependencies
 
-The protocol, reward, GRPO reference implementation, controller and timing tests use only the Python standard library.
+The protocol, reward, GRPO/DPO reference implementations, preference pairing,
+controller and timing tests use only the Python standard library.
 
 ```bash
 python3 -m unittest discover -s tests -v
@@ -65,6 +66,34 @@ The standalone run must improve `final_pass@1` above `initial_pass@1`. The
 reference tests additionally check a hand-calculated GAE trajectory, PPO clip
 sign behavior, Critic regression, and that PPO's actor term is numerically the
 same as GRPO's policy term when both are given the same advantage.
+
+## Minimal online DPO loop
+
+The DPO path reuses the same rollout and rule-reward stages as GRPO. Within
+each prompt group, `preference_pairs` picks the highest-reward response as
+chosen and the lowest as rejected; tied groups produce no pair. The loss is
+the sequence-level `-log sigmoid(beta * margin)` objective against a frozen
+reference model, so `HuggingFaceDpoTrainerWorker` requires `reference_model`
+and deliberately ignores advantages and old logprobs. It forwards chosen and
+rejected rows in one concatenated batch for the policy and the reference, and
+micro-batches by pair count while preserving the full-batch pair-mean
+objective.
+
+```bash
+python -m pip install -e '.[torch]'
+python -m unittest tests.test_dpo tests.test_torch_dpo tests.test_preference tests.test_hf_dpo -v
+PYTHONPATH=. CUDA_VISIBLE_DEVICES=0 python examples/hf_dpo_smoke.py --model /path/to/local/model
+```
+
+The reference tests cover hand-computed losses (positive, zero and negative
+margins), padding invariance, `length_normalize` semantics and input
+validation. The torch tests cross-check every metric against the reference
+implementation and verify gradients flow only through valid tokens. The HF
+tests confirm the policy updates, the reference stays frozen, pair-level
+micro-batching matches the full batch after one step, and the Controller runs
+an iteration unchanged. The smoke prints `loss`, `reward_margin` and
+`accuracy` for one iteration; like the GRPO smoke it is a plumbing check, not
+a quality evaluation.
 
 ## GPU validation
 

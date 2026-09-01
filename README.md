@@ -105,7 +105,7 @@ PYTHONPATH=. python examples/toy_ppo_train.py
 ```text
 README.md                 # 唯一首页：结论、阅读顺序、当前计划
 docs/                     # 人读文档，按状态 / 结果 / 架构 / 指南 / 运维分类
-mini_verl/                # 最小、可测试的 GRPO 实现
+mini_verl/                # 最小、可测试的 GRPO 与 DPO 实现
 tests/                    # 正确性、契约和集成测试
 benchmarks/               # toy、HF、pipeline 性能对照
 examples/                 # 最小可运行示例

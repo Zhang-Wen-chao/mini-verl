@@ -33,7 +33,7 @@ PPO/GAE + 4B Critic vs standard GRPO：同 12-trajectory 预算的 5-step gate �
 
 | 层级 | 状态 | 做成了什么 | 应该读什么 |
 |---|---|---|---|
-| 最小框架 `mini_verl/` | 已完成核心闭环 | trajectory 契约、GRPO + KL、HF rollout/trainer、策略同步、checkpoint、DDP smoke、长度调度与性能观测 | [框架架构与实现进度](architecture/mini-verl-architecture.md)、[运行指南](guides/runbook.md) |
+| 最小框架 `mini_verl/` | 已完成核心闭环 | trajectory 契约、GRPO + KL、DPO 在线偏好闭环、HF rollout/trainer、策略同步、checkpoint、DDP smoke、长度调度与性能观测 | [框架架构与实现进度](architecture/mini-verl-architecture.md)、[运行指南](guides/runbook.md) |
 | 官方训练系统 `official_verl/` | 已完成 | 锁定官方 `verl`、FSDP2 + vLLM、preflight、数据转换、规则奖励、checkpoint 与 clean exit | [官方实验资产索引](../official_verl/README.md)、[0.6B 系统 smoke](../official_verl/docs/results/qwen3-0.6b-gsm8k-smoke.md) |
 | 4B 训练质量 | 已完成第一条有效实验 | Qwen3.5-4B、2037 训练题、679 step、4×L20、独立 held-out 正向提升 | [679-step 结果](results/qwen3.5-4b-grpo-679-step.md) |
 | GRPO 算法开发对照 | 已完成单 seed 筛选 | 先通过 20-step no-std health gate，再从 base 跑 no-std / standard 各 170 step；两段均 clean exit、170 rollout、完整 checkpoint | [170-step 开发对照](results/qwen3.5-4b-grpo-170-step-development-ablation.md) |
@@ -111,7 +111,8 @@ rollout → trajectory / old logprob → reward → group advantage
 | 项目 | 状态 | 原因 / 位置 |
 |---|---|---|
 | LLM PPO actor-critic / GAE 的质量对照 | 尚未完成 | 已完成与 GRPO 匹配的 5-step 稳定性/资源 gate；仍需新的 development/final split、20-step 与多 seed，不能以 64 题 monitor 选算法 |
-| 学习型 Reward Model、DPO、KTO | 未做 | 当前真实实验使用可审计的数学规则 reward，避免把奖励模型误差与 GRPO 混在首条质量结论中 |
+| 学习型 Reward Model、KTO | 未做 | 当前真实实验使用可审计的数学规则 reward，避免把奖励模型误差与 GRPO 混在首条质量结论中 |
+| DPO 的真实偏好数据与质量对照 | 未做 | `mini_verl` 已实现规则 reward 组内配对的在线 DPO 闭环（loss 双实现对拍 + HF trainer + smoke）；离线偏好数据集加载与 LLM 质量实验未做 |
 | vLLM / SGLang 作为 `mini_verl` rollout backend | 未做 | 最小框架已有 HF backend；官方验证已使用 vLLM，下一步再决定是否抽象回接 |
 | 多机、异构硬件、生产级容错 | 未做 | 有意不纳入教学/验证型最小实现 |
 | 多 seed 的算法对照 | 待做 | 170-step 单 seed 只提供筛选线索；需先固定新的 development / final 划分 |
@@ -136,3 +137,12 @@ rollout → trajectory / old logprob → reward → group advantage
 GRPO 5-step 的训练及 watcher exit status 均为 0；PPO/GRPO 两腿各含 5 rollout 与
 `global_step_5`。本地新增的 preflight / development-pair summary 定向单测均通过；完整
 unittest 总数仍以最近一次 106 passed、28 skipped 的全量记录为准。
+
+2026-09-01：`mini_verl` 新增在线 DPO 闭环（`algorithms/dpo.py` reference/torch 双实现、
+`preference.py` 规则 reward 组内配对、`HuggingFaceDpoTrainerWorker`、`examples/hf_dpo_smoke.py`）。
+macOS 无 ML 依赖环境 158 passed / 40 skipped；L20 `zhangwenchao-megatron` 容器
+（CUDA_VISIBLE_DEVICES=1）全套 158 passed / 0 failed，含 float64 torch 对拍、真实 GPT-2
+trainer、pair 级 micro-batch 一致性与 Controller 集成测试；随后用本地 Qwen3-0.6B-Base 完成
+1 次 DPO 迭代 smoke（4 trajectories、mean_reward 0.5、初始 loss≈log 2、margin 0——初始
+policy 与 reference 相同的预期行为）。该 smoke 只验证管线，不是质量结论。验证在 agent 创建的
+隔离目录 `repos/mini-verl-dpo-verify-20260901/` 完成，未改动 `mini-verl-l20` 副本。
