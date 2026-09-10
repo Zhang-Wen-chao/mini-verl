@@ -140,7 +140,7 @@ unittest 总数仍以最近一次 106 passed、28 skipped 的全量记录为准�
 
 2026-09-01：`mini_verl` 新增在线 DPO 闭环（`algorithms/dpo.py` reference/torch 双实现、
 `preference.py` 规则 reward 组内配对、`HuggingFaceDpoTrainerWorker`、`examples/hf_dpo_smoke.py`）。
-macOS 无 ML 依赖环境 158 passed / 40 skipped；L20 `zhangwenchao-megatron` 容器
+macOS 无 ML 依赖环境 158 passed / 40 skipped；L20 `<container>` 容器
 （CUDA_VISIBLE_DEVICES=1）全套 158 passed / 0 failed，含 float64 torch 对拍、真实 GPT-2
 trainer、pair 级 micro-batch 一致性与 Controller 集成测试；随后用本地 Qwen3-0.6B-Base 完成
 1 次 DPO 迭代 smoke（4 trajectories、mean_reward 0.5、初始 loss≈log 2、margin 0——初始

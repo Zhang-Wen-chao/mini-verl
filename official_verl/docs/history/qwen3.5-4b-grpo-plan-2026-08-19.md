@@ -69,13 +69,13 @@ type、chat template、vLLM 0.24.0 加载和 rollout log-prob 路径。不能仅
 
 | 输入 | 持久路径 | 已验证的身份 |
 | --- | --- | --- |
-| 模型 | `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/.official-verl/models/Qwen3.5-4B` | `Qwen/Qwen3.5-4B` revision `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a`；两个权重 shard 的 SHA-256 分别为 `26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61` 与 `cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188` |
-| 训练源 | `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/.official-verl/data/OpenR1-Math-220k-default-rev-e4e141ec` | `open-r1/OpenR1-Math-220k`, `default`, revision `e4e141ec9dea9f8326f4d347be56105859b2bd68`；10 个 parquet、93,733 行，目录内有 `SHA256SUMS` |
-| MATH 评测 | `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/.official-verl/data/qwen3_5_4b/MATH-lighteval-test` | `DigitalLearningGmbH/MATH-lighteval`, `default/test`, revision `0530c78699ea5e8eb5530600900e1f328b48acad`；5,000 行 |
-| GSM8K 评测 | `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/.official-verl/data/qwen3_5_4b/gsm8k-test` | `openai/gsm8k`, revision `740312add88f781978c0658806c59bc2815b9866`；1,319 行 |
+| 模型 | `<repo>/.official-verl/models/Qwen3.5-4B` | `Qwen/Qwen3.5-4B` revision `851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a`；两个权重 shard 的 SHA-256 分别为 `26a93f066e1916adb13453dae5a0c707c0fbc71299ed98779571a907b8e74c61` 与 `cb544bd9bfae93dc59b0f22b292f5933573854a7f9b97835c67060d7d910e188` |
+| 训练源 | `<repo>/.official-verl/data/OpenR1-Math-220k-default-rev-e4e141ec` | `open-r1/OpenR1-Math-220k`, `default`, revision `e4e141ec9dea9f8326f4d347be56105859b2bd68`；10 个 parquet、93,733 行，目录内有 `SHA256SUMS` |
+| MATH 评测 | `<repo>/.official-verl/data/qwen3_5_4b/MATH-lighteval-test` | `DigitalLearningGmbH/MATH-lighteval`, `default/test`, revision `0530c78699ea5e8eb5530600900e1f328b48acad`；5,000 行 |
+| GSM8K 评测 | `<repo>/.official-verl/data/qwen3_5_4b/gsm8k-test` | `openai/gsm8k`, revision `740312add88f781978c0658806c59bc2815b9866`；1,319 行 |
 
 远端输入总清单为
-`/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/.official-verl/data/qwen3_5_4b/INPUTS_MANIFEST_2026-08-19.txt`。
+`<repo>/.official-verl/data/qwen3_5_4b/INPUTS_MANIFEST_2026-08-19.txt`。
 锁定 runtime 已能在纯本地文件模式加载模型配置和 tokenizer：`model_type=qwen3_5`、
 架构为 `Qwen3_5ForConditionalGeneration`，并且存在 chat template。它是多模态
 conditional-generation 架构，因此仍须在阶段 A 用当前 pinned vLLM 做实际文本

@@ -1,7 +1,7 @@
 # Qwen3.5-4B GRPO 679-step 正式 run 验收（2026-08-20）
 
 分支：`official-verl-grpo`。实验 artifact 在 L20：
-`/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/qwen3.5-4b-openr1-grpo-2037row-679step-v5-short-trainer3-rollout1-20260819T1919`
+`<repo>/artifacts/qwen3.5-4b-openr1-grpo-2037row-679step-v5-short-trainer3-rollout1-20260819T1919`
 
 ---
 

@@ -17,7 +17,7 @@ rejected**: their tiny data budget and zero held-out accuracy do not justify a
 
 ## Clean rerun: 2026-08-19
 
-- Artifact: `/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/qwen3-0.6b-gsm8k-grpo-4gpu-smoke-rerun-localenv-20260819T1011`.
+- Artifact: `<repo>/artifacts/qwen3-0.6b-gsm8k-grpo-4gpu-smoke-rerun-localenv-20260819T1011`.
 - Launcher result: `logs/exit_status` contains `0`; total wall time reported by
   official verl was 515.29 seconds.
 - Runtime was the container-local, rebuildable

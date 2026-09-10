@@ -1,7 +1,7 @@
 # 0.6B GRPO rollout 优化对照实验（2026-08-24）
 
 分支：`official-verl-grpo`。全部实验 artifact 在 L20：
-`/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/rollout-opt/`
+`<repo>/artifacts/rollout-opt/`
 
 **结论状态：已固定（2026-08-24）。** 实验代码与本文档锁定于本机 mini-verl `main`
 commit `75c5e50`（含 micro-batch 扫描）；上游 verl snapshot
@@ -192,7 +192,7 @@ kernel launch；mb=8 时 8 样本一次并行，通信与启动开销摊薄到 1
 
 基线（其余对照在基线上加一行参数）：
 ```bash
-cd /mnt/storage01/zhangwenchao02/repos/mini-verl-l20
+cd <repo>
 export VERL_DIR=$PWD/.official-verl/verl
 export MODEL_PATH=$PWD/.official-verl/models/Qwen3-0.6B-Base
 export TRAIN_FILE=$PWD/.official-verl/data/gsm8k-smoke/train.parquet

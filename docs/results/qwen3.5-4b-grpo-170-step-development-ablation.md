@@ -52,7 +52,7 @@ exit status `0`；未见 OOM、NCCL、NaN 或 Inf 训练失败。
 远端 L20 产物（不提交到 Git；每个长 run 约 54 GiB）为：
 
 ```text
-/mnt/storage01/zhangwenchao02/repos/mini-verl-l20/artifacts/
+<repo>/artifacts/
   qwen3.5-4b-openr1-grpo-nostd-20step-trainer3-rollout1-20260822T0306
   qwen3.5-4b-openr1-grpo-nostd-170step-trainer3-rollout1-20260822T0306
   qwen3.5-4b-openr1-grpo-standard-170step-trainer3-rollout1-20260822T0306

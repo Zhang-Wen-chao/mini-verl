@@ -77,7 +77,7 @@
 - 在宿主机直接调 venv python 报 `No such file or directory`。
 
 ### 修复
-- 一律通过 `nerdctl exec -w / zhangwenchao-megatron <cmd>` 进容器执行。
+- 一律通过 `nerdctl exec -w / <container> <cmd>` 进容器执行。
 - 判断训练在哪个容器：`nerdctl ps` + 容器内 `ps aux` 交叉确认。
 
 ### 经验
