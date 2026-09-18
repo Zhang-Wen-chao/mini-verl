@@ -120,6 +120,128 @@ mini-verl/
 └── tests/
 ```
 
+## 代码导读
+
+上一节是地图，这一节是从入口走到出口的那条线。所有锚点都是 `文件:行`。
+
+先对齐一个 README 与代码的偏差：README 的 Phase 0–3 是「计划/阶段」叙事，v0 完成边界
+（`README.md:98`）把「Agent 工具轨迹」列为独立后续项目；但代码里 agent 工具调用 RL 已经
+跑过实验（`examples/agent_*.py`、`experiments/strategy2/`）。这些实验脚本不在
+`mini_verl/` 包内、不参与 v0 主线，本节以实际代码为准：Phase 0–3 的 GRPO 闭环是已实现的
+主线，agent 实验是挂在同一 Controller 协议上的实验脚本。
+
+### 入口清单：跑哪个，走的是哪条路
+
+| 命令 | 走的路径 | 入口锚点 |
+|---|---|---|
+| `python -m mini_verl.toy` | 无模型 categorical policy 的最小 GRPO 闭环（CPU 可跑） | `run_toy_grpo()` → `toy.py:129` |
+| `python examples/hf_grpo_smoke.py --model <本地模型>` | HF CausalLM 单机 rollout/old-logprob/trainer 集成 smoke | `main()` → `hf_grpo_smoke.py:26` |
+| `python examples/agent_grpo_smoke.py --model ... --data ...` | 多轮工具调用 GRPO（自定义 `[PY: ...]` 格式，MATH） | `main()` → `agent_grpo_smoke.py:209` |
+| `python examples/agent_rl_overnight.py --mode tool --reward-version ...` | 三种 reward 版本的 agent 对照（final-only / tool-bonus / process） | `main()` → `agent_rl_overnight.py:280` |
+| `python examples/agent_qwen_toolcall_overnight.py` | Qwen 原生 `<tool_call>` 工具协议 GRPO | `main()` → `agent_qwen_toolcall_overnight.py:246` |
+| `bash experiments/run_overnight.sh` | 8 组合过夜矩阵（agent 主线 × 稳定性消融） | `run_agent()` → `run_overnight.sh:19` |
+| `experiments/strategy2/run_overnight_followup.sh` | slime 生态 retool 多轮 GRPO（Qwen3-4B，DAPO math） | `generate()` → `generate_with_retool.py:218` |
+
+一个贯穿全项目的设计点：**Controller 只认三个 worker 协议，不认具体实现**。
+`RolloutWorker`（`workers.py:19`）、`TrainerWorker`（`workers.py:25`）、
+`PolicySynchronizer`（`workers.py:37`）各只有一个方法签名；toy 的 categorical policy、
+HF 的 CausalLM、agent 的多轮工具 rollout 都是同一协议的实现。换 rollout 后端
+（vLLM/SGLang）就是换一个实现，Controller 与 reward/train 一字不动。
+
+### 一条 iteration 的生命周期：讲代码就讲这条线
+
+```python
+controller = Controller(rollout_worker, reward_worker, trainer_worker)  # controller.py:21
+for _ in range(iters):
+    result = controller.run_iteration()   # controller.py:37
+```
+
+`run_iteration()` 是同步主线的脊椎：一次完整迭代 = 五个动作，顺序不能换。
+
+| # | 动作 | 位置 | 干什么 |
+|---|---|---|---|
+| 1 | rollout | `controller.py:41` | 用当前 `policy_version` 采样 G 条 response |
+| 2 | 版本校验 | `controller.py:43` | `require_policy_version` 拒绝过期轨迹 |
+| 3 | reward | `controller.py:50` | 规则奖励 + 组内 advantage |
+| 4 | train | `controller.py:52` | 一次 GRPO 更新（`learner_policy_version`） |
+| 5 | sync + 版本推进 | `controller.py:60` / `controller.py:75` | 全量权重同步到 rollout 副本，`policy_version += 1` |
+
+第 1 步往下分两支，走哪支由 rollout worker 的实现决定：
+
+```
+单轮   HuggingFaceRolloutWorker.rollout()      hf.py:238
+       → model.generate(...)                    hf.py:285   ← 一次生成
+       → 单独一次 old-logprob forward           hf.py:359
+       → response_logprobs_from_logits          tensors.py:32
+agent  ToolAgentRolloutWorker.rollout()         agent_grpo_smoke.py:144
+       → _run_episode() 多轮循环                agent_grpo_smoke.py:122
+         generate → 解析 [PY: ...] → run_python → 追加 tool 输出 → 再 generate
+       → old_logprobs 是占位符                  agent_grpo_smoke.py:154
+```
+
+第 4 步的 GRPO loss 在 `algorithms/grpo.py` 有双实现：`grpo_loss_reference`
+（`grpo.py:81`，无依赖标量版，供单测对照）与 `torch_grpo_loss`（`grpo.py:139`，
+可微版，trainer 用）。trainer 在 `hf.py:610` 调用它，`hf.py:623` 做一次 optimizer step。
+
+### agent 多轮 rollout 与普通单轮 rollout 的差别
+
+普通单轮（`HuggingFaceRolloutWorker`）对每个 prompt 只调一次 `model.generate`，
+response 就是最终答案；agent 多轮（`ToolAgentRolloutWorker`）把一次 rollout 变成
+「生成 → 解析工具调用 → 执行 → 把工具输出追加进对话 → 再生成」的循环，直到没有工具
+调用或 `MAX_TURNS`（`agent_grpo_smoke.py:31`）耗尽：
+
+- 工具协议是模型相关的：`agent_grpo_smoke.py` 用自定义 `[PY: <code>]` 格式
+  （`PY_RE`，`agent_grpo_smoke.py:30`），`agent_qwen_toolcall_overnight.py` 用 Qwen
+  原生 `<tool_call>{"name": "python", ...}</tool_call>`（`JSON_TOOL_CALL_RE`，
+  `agent_qwen_toolcall_overnight.py:41`）。探测脚本 `experiments/probe_qwen_toolcall.py`
+  就是为确认「模型到底会不会发工具调用」而写的。
+- 工具执行是沙箱：`run_python`（`agent_grpo_smoke.py:34`）用 AST 白名单；
+  `experiments/strategy2/tool_sandbox.py:94` 的 `PythonSandbox` 是子进程 + 内存/超时
+  限制的完整版。
+- 多轮轨迹的 response 是「最终文本」而非完整对话：`_run_episode` 返回
+  `(final_text, tool_calls)`（`agent_grpo_smoke.py:122`），工具调用记录进
+  `metadata["tool_calls"]`，reward 只看最终答案（`agent_reward`，`agent_grpo_smoke.py:169`）。
+- 与单轮的关键差别：agent 路径**没有** old-logprob 回算 forward。`agent_grpo_smoke.py:154`
+  把 `old_logprobs` 写成 `(0.0,) * len(tokens)` 占位符，注释说「replaced by trainer」，
+  但 `HuggingFaceTrainerWorker.train` 直接读 `trajectory.old_logprobs`（`hf.py:593`），
+  不会重算——所以 agent 实验的 importance ratio 是 `exp(new_logprob)` 而非真实新旧策略比。
+  这是实验脚本层面的已知偏差，v0 主线的 `HuggingFaceRolloutWorker` 没有这个问题。
+
+### 关键设计点与可替换边界
+
+- **Trajectory 契约是稳定边界**：`Trajectory`（`protocol.py:45`）/ `TrajectoryBatch`
+  （`protocol.py:145`）是 rollout、reward、trainer 之间的唯一数据面；`response_mask`
+  显式表达 padding 语义（`protocol.py:49`），`groups()`（`protocol.py:177`）按
+  `group_id` 分组做组内 advantage。
+- **advantage 在 reward worker 收口**：`apply_rewards`（`reward.py:38`）→
+  `group_relative_advantages`（`reward.py:49`），组内 population std，常数组得零
+  advantage。
+- **策略版本是正确性锚点**：`synchronize_policy`（`policy_sync.py:26`）全量 state-dict
+  拷贝；`AsyncRolloutBuffer`（`pipeline.py:32`）用 `max_policy_lag` 显式声明可容忍的
+  滞后，`PrefetchingController`（`async_controller.py:27`）把 rollout(v_k) 与 learner
+  工作重叠。
+- **agent 实验是挂在协议上的脚本，不是包内组件**：`ToolAgentRolloutWorker` 是
+  `examples/` 里的独立类，不走 `HuggingFaceRolloutWorker` 的 micro-batching / length
+  bucketing / token budget 路径；`experiments/strategy2/` 的 retool 训练甚至不 import
+  `mini_verl`，直接跑 slime 生态（`generate_with_retool.py:218`）。想加新机制，多数
+  情况下改的是这条线上的一环，而不是新开一条路。
+
+### 阅读顺序
+
+```
+1. mini_verl/toy.py:129   先跑一遍，建立"谁在驱动谁"的整体印象
+2. controller.py:37       run_iteration() 五拍背下来，后面所有机制都往这五拍上挂
+3. protocol.py            Trajectory / TrajectoryBatch 契约
+4. algorithms/grpo.py     双实现对照看数值等价
+5. reward.py              组内 advantage 的数学
+6. hf.py:238              HF rollout 与 trainer 的契约实现
+7. examples/agent_grpo_smoke.py   agent 多轮 rollout 与单轮的差别
+8. 按需深入               async_controller / distributed / checkpoint / strategy2
+```
+
+进度表里的 Phase 0–3 就是这个顺序：`protocol → grpo → reward → hf → controller`。
+每一步都先有单测、再有下一个机制，所以任何一层都能单独拿出来讲。
+
 ## 设计原则
 
 1. **先闭环，后扩展。** 先在小而可验证的任务上证明 RL 真在学习。
