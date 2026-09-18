@@ -113,3 +113,135 @@ official_verl/            # 官方 verl 的可执行脚本、预检和实验归�
 ```
 
 文档总索引见 [docs/README.md](docs/README.md)。
+
+## 代码导读
+
+上一节是地图，这一节是从入口走到出口的那条线。所有锚点都是 `文件:行`（相对项目根）。
+
+### 入口清单：跑哪个，走的是哪条路
+
+| 命令 | 走的路径 | 入口锚点 |
+|---|---|---|
+| `python -m mini_verl.toy` | 最小 GRPO 闭环（categorical policy，无模型下载） | `main()` → `mini_verl/toy.py:183`（`run_toy_grpo` → `mini_verl/toy.py:129`） |
+| `python examples/toy_grpo_train.py` | 同上（7 行兼容入口，逻辑全在 `mini_verl/toy.py`） | `main()` → `mini_verl/toy.py:183` |
+| `python examples/toy_ppo_train.py` | 同一 categorical 环境的 PPO actor--critic/GAE 教学对照 | `run(...)` → `examples/toy_ppo_train.py:44` |
+| `python examples/hf_grpo_smoke.py --model <本地快照>` | 真实 HF CausalLM 的 rollout/reward/GRPO 更新（需 CUDA） | `Controller(...)` → `examples/hf_grpo_smoke.py:42` |
+| `python examples/hf_dpo_smoke.py --model <本地快照>` | 真实 HF CausalLM 的 rollout/reward/DPO 更新（需 CUDA） | `Controller(...)` → `examples/hf_dpo_smoke.py:47` |
+| `python examples/toy_minivllm_grpo.py` | mini-verl Controller + mini-vllm Engine rollout（全自研栈第②步） | `Controller(...)` → `examples/toy_minivllm_grpo.py:103` |
+| `python examples/qwen_minivllm_grpo.py --model ... --data ...` | 真实 Qwen3-0.6B + mini-vllm rollout | `Controller(...)` → `examples/qwen_minivllm_grpo.py:106` |
+| `python examples/phase0_smoke.py` | 无模型依赖的 data/reward 阶段 | `main()` → `examples/phase0_smoke.py:7` |
+
+一个贯穿全项目的设计点：**同一份 `Controller`，只换 rollout_worker，就换了一条 rollout
+路**。`ToyRolloutWorker`（`mini_verl/toy.py:78`）、`HuggingFaceRolloutWorker`
+（`mini_verl/hf.py:201`）与 `MiniVllmRolloutWorker`（`mini_verl/rollout_minivllm.py:25`）
+实现同一个 `RolloutWorker` 协议（`mini_verl/workers.py:19`），Controller 不知道自己在用
+什么后端生成轨迹——这是后端可替换性的支点。
+
+### 一条 GRPO 迭代的生命周期：讲代码就讲这条线
+
+```python
+controller = Controller(rollout_worker, reward_worker, trainer_worker)  # mini_verl/controller.py:20
+result = controller.run_iteration()                                     # mini_verl/controller.py:37
+```
+
+`run_iteration()` 是全项目的脊椎：一次完整迭代 = 六个动作，顺序不能换。
+
+| # | 动作 | 位置 | 干什么 |
+|---|---|---|---|
+| 1 | `rollout_worker.rollout(policy_version=v)` | `mini_verl/controller.py:41` | 用策略版本 v 采样一组轨迹 |
+| 2 | `rollout.require_policy_version(v)` | `mini_verl/controller.py:43` | 版本校验：训练只消费声称版本的轨迹 |
+| 3 | `reward_worker.score(rollout)` | `mini_verl/controller.py:50` | 规则奖励 + 组内 advantage 标准化 |
+| 4 | `trainer_worker.train(scored, learner_policy_version=v)` | `mini_verl/controller.py:54` | 一次 GRPO 更新 |
+| 5 | `policy_synchronizer.synchronize(v+1)` | `mini_verl/controller.py:60` | 把新权重发布给 rollout 副本 |
+| 6 | `self.policy_version = v+1` | `mini_verl/controller.py:75` | 版本推进，进入下一轮 |
+
+第 1 步往下有三支，走哪支由 rollout_worker 的实现决定：
+
+```
+toy        ToyRolloutWorker.rollout → _sample_batch        mini_verl/toy.py:85 / :47
+HF         HuggingFaceRolloutWorker.rollout                mini_verl/hf.py:240
+           → model.generate(...)                           mini_verl/hf.py:287
+           → old-logprob 回算 forward                      mini_verl/hf.py:361
+           → response_logprobs_from_logits                 mini_verl/tensors.py:32
+mini-vllm  MiniVllmRolloutWorker.rollout                   mini_verl/rollout_minivllm.py:76
+           → engine.add_request(...)                       mini_verl/rollout_minivllm.py:87
+           → while engine.has_requests(): engine.step()    mini_verl/rollout_minivllm.py:90
+           → _old_logprobs 全序列 forward                  mini_verl/rollout_minivllm.py:47
+```
+
+第 3 步往下：
+
+```
+score → apply_rewards(batch, reward_fn)                    mini_verl/reward.py:38
+      → group_relative_advantages(...)                     mini_verl/reward.py:49
+        → (reward - mean) / (std + epsilon)                mini_verl/reward.py:68
+```
+
+第 4 步往下：
+
+```
+train → causal_lm_inputs(...)                              mini_verl/hf.py:173
+      → response_logprobs_from_logits                      mini_verl/tensors.py:32
+      → torch_grpo_loss(...)                               mini_verl/algorithms/grpo.py:139
+        → ratio = exp(new - old)                           mini_verl/algorithms/grpo.py:178
+        → surrogate = min(ratio*A, clip(ratio)*A)          mini_verl/algorithms/grpo.py:181
+```
+
+三个落在这条线上的设计点，适合主动展开：
+
+- **策略版本不变量是第一条正确性约束**：`mini_verl/controller.py:22` 的 docstring 把它
+  写成显式契约——训练只消费「声称要优化的那个策略版本」采样的轨迹。第 2 步的
+  `require_policy_version`（`mini_verl/protocol.py:170`）在训练前拦截过期/错版本轨迹；
+  异步路径上同样的检查落在 `mini_verl/pipeline.py:77`（版本集合校验）与
+  `mini_verl/pipeline.py:81`（lag 校验）。
+- **worker 协议是全部可替换边界**：`mini_verl/workers.py:19` / `:25` / `:37` 三个
+  `Protocol` 定义 rollout、train、sync 三处接口。换 rollout 后端（HF generate →
+  mini-vllm engine → 未来 vLLM/SGLang）只实现 `RolloutWorker`；换训练后端只实现
+  `TrainerWorker`。`algorithms/` 子包（`grpo.py` / `ppo.py` / `dpo.py`）每个目标都有
+  dependency-free 的 reference 实现与 torch 实现双份，数值行为可对拍（如
+  `mini_verl/algorithms/grpo.py:81` 与 `:139`）。
+- **response 对齐的 off-by-one 收口在 `tensors.py`**：`response_logprobs_from_logits`
+  （`mini_verl/tensors.py:32`）把「logits[b,t] 预测 t+1 位置的 token」这个约定集中在一
+  处——第一个 response token 从 `prompt_length - 1` 读起（`mini_verl/tensors.py:66`）。
+  rollout 的 old-logprob 回算与 trainer 的 policy logprob 共用这一个函数，错位只可能
+  发生在这里。
+
+### 异步路径与外部推理接入
+
+同步 `Controller` 是默认正确性路径。`AsyncRolloutBuffer`（`mini_verl/pipeline.py:32`）
+用 `max_policy_lag` 显式声明允许的滞后；`PrefetchingController`
+（`mini_verl/async_controller.py:27`）在 learner 优化 batch v_k 时用独立 rollout 副本
+预取 v_k 的后继 batch，训练结束后才把权重同步到 v_(k+1)
+（`mini_verl/async_controller.py:73` 提交、`:92` 同步），消费时再校验 lag
+（`mini_verl/pipeline.py:81`）。
+
+mini-vllm 接入是「全自研栈」的第②步：`MiniVllmRolloutWorker`
+（`mini_verl/rollout_minivllm.py:25`）把 `mini_vllm.engine.Engine` 包成
+`RolloutWorker`，每个 prompt 按 `group_size` 次 `add_request` + `step()` 循环生成
+（`mini_verl/rollout_minivllm.py:87` / `:90`），生成结束后用一次全序列 forward 重算
+old_logprobs（`mini_verl/rollout_minivllm.py:47`）——占位零会让 `ratio = exp(new - old)`
+爆炸并 clip 掉一切。真实模型路径见 `examples/qwen_minivllm_grpo.py:106`。
+
+### 与「目录职责」互补的锚点
+
+- `mini_verl/` 的 GRPO 与 DPO 实现分别落在 `mini_verl/algorithms/grpo.py:139`（torch 版）
+  与 `mini_verl/algorithms/dpo.py:142`（torch 版）；偏好对构造在
+  `mini_verl/preference.py:31`。
+- `benchmarks/` 的对照入口：`benchmarks/toy_grpo_benchmark.py:18`（toy 全迭代）、
+  `benchmarks/tiny_hf_grpo_benchmark.py:92`（真实 HF generate + GRPO 更新）。
+- `tests/` 按模块镜像：`tests/test_controller.py`、`tests/test_grpo.py`、
+  `tests/test_hf.py`、`tests/test_pipeline.py` 等，与 `mini_verl/` 一一对应。
+- `official_verl/` 是官方 verl 实验栈，不 import `mini_verl`；两者的语义回写关系见
+  README「当前计划」第 4 条。
+
+### 阅读顺序
+
+```
+1. examples/toy_grpo_train.py   先跑一遍，建立"谁在驱动谁"的整体印象（逻辑在 mini_verl/toy.py）
+2. mini_verl/controller.py:37  run_iteration()  六拍背下来，后面所有机制都是往这六拍上挂
+3. mini_verl/protocol.py       Trajectory / TrajectoryBatch：版本、mask、reward/advantage 字段
+4. mini_verl/reward.py         apply_rewards → group_relative_advantages
+5. mini_verl/algorithms/grpo.py  reference 与 torch 双实现对拍
+6. mini_verl/hf.py             HuggingFaceRolloutWorker / HuggingFaceTrainerWorker
+7. 按需深入                    rollout_minivllm.py（外部推理接入）、pipeline.py + async_controller.py（异步）
+```
