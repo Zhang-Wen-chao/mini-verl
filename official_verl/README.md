@@ -12,6 +12,7 @@
 | 4B 正式实验的结果 | [Qwen3.5-4B / 679-step 结果](../docs/results/qwen3.5-4b-grpo-679-step.md) |
 | 4B 的历史设计、显存与奖励排障 | [历史计划](docs/history/qwen3.5-4b-grpo-plan-2026-08-19.md)、[奖励诊断 runlog](docs/runlogs/2026-08-19-qwen3.5-4b-reward-diagnosis.md) |
 | 0.6B 系统 smoke 结果 | [0.6B smoke](docs/results/qwen3-0.6b-gsm8k-smoke.md) |
+| 官方 quickstart（PPO / GSM8K / 0.5B）在消费卡上的跑通与镜像版本门槛 | [4090D quickstart runlog](docs/runlogs/2026-09-26-4090d-verl-quickstart-ppo-gsm8k.md) |
 | 每次实验的记录模板 | [runlog 模板](docs/templates/runlog-template.md) |
 
 正式 4B run 使用官方 `one_step_off_policy` 路径：3 张 FSDP2 trainer GPU + 1 张 vLLM
