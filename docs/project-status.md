@@ -1,6 +1,7 @@
 # 项目状态：mini-verl / official-verl-grpo
 
-更新：2026-08-22。分支：`official-verl-grpo`。
+更新：2026-09-28。分支：数学 GRPO 主线在 `official-verl-grpo`；
+SWE / agentic RL 实验在 `swe-grpo-l20`（本分支）。
 
 ## 一句话结论
 
@@ -12,6 +13,12 @@
 
 这说明当前训练契约在该固定模型、数据、奖励、算力和评测协议下有效；它不是对所有
 数学任务、所有模型或更大训练规模的泛化承诺。
+
+另一条线（`swe-grpo-l20`）是 **SWE-bench 上的 agentic RL**，它给出的是一条
+**可判定的负结果**：200 步训练让模型把训练池那 55 道题从 `reward=1` 13.9% 背到 48.8%，
+但在零重叠的 65 道留出题上**没有任何迁移**（40 步复测 McNemar p = 1.0000）。
+它的价值不在分数，而在于干净地分离了**记忆与泛化**、并定位了四处会让结论**静默失效**
+的工程陷阱。详见[下文第 5 点](#5-swe--agentic-rl一条可判定的负结果而不是一个刷分数字)。
 
 ## 已完成的主线
 
@@ -39,6 +46,7 @@ PPO/GAE + 4B Critic vs standard GRPO：同 12-trajectory 预算的 5-step gate �
 | GRPO 算法开发对照 | 已完成单 seed 筛选 | 先通过 20-step no-std health gate，再从 base 跑 no-std / standard 各 170 step；两段均 clean exit、170 rollout、完整 checkpoint | [170-step 开发对照](results/qwen3.5-4b-grpo-170-step-development-ablation.md) |
 | 4B PPO actor-critic 可行性 | 已完成 5-step gate | 真实 PPO/GAE + 4B Critic 与 standard GRPO 在同一 12-trajectory/step 契约下各完成 5 update、checkpoint 与 clean exit；PPO 借助 Critic activation offload 通过完整 batch 的显存边界 | [PPO/GRPO 5-step 公平对照](../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md) |
 | 评测与实验可靠性 | 已识别并修复关键问题 | 训练/评测去重、答案格式归一化、逐题落盘、单题超时、评测回落诊断 | [回落分析](results/step-510-to-679-regression-analysis.md)、[经验记录](operations/l20-lessons-learned.md) |
+| SWE / agentic RL（`swe-grpo-l20`） | 已完成一条**可判定的负结果** | 2×L20 + Qwen3.5-4B + slime(Megatron+SGLang+Ray) + `mini-swe-agent`，SWE-bench Lite 上 200 步 GRPO：训练池 `reward=1` 13.9%→48.8%，零重叠留出池 65 题无迁移（40 步复测 p = 1.0000）；并定位四处**静默失效**的工程陷阱 | [SWE-GRPO on 2×L20](results/swe-grpo-l20-negative-result.md) |
 
 ## 当前最值得展示的亮点
 
@@ -85,7 +93,28 @@ trajectories/step、相同数据/seed/长度/拓扑完成了 5 step：PPO 的 64
 短运行中，PPO 的真实 actor--critic 路径可行但资源代价更高。完整数据见
 [PPO/GRPO 5-step 公平对照](../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md)。
 
-### 5. mini 框架的价值在“能验证和定位”，不是重复造完整 verl
+### 5. SWE / agentic RL：一条**可判定**的负结果，而不是一个刷分数字
+
+在 2×L20 上用 slime（Megatron + SGLang + Ray）+ `mini-swe-agent` 跑通 SWE-bench 的
+agentic RL 全链路，200 步 GRPO（Qwen3.5-4B）：
+
+| 口径 | 起点 | 终点 | 结论 |
+|---|---|---|---|
+| 训练池 55 题（反复看） | `reward=1` 13.9% | **48.8%** | 上升是真的 |
+| 零重叠留出池 65 题 | 5.8% | 6.2%（40 步复测） | **无迁移**，题级两者都是 7/65，McNemar **p = 1.0000** |
+
+这是**记忆 vs 泛化**的一次干净分离：同一个权重在反复看的题上大幅上升，在没见过的题上
+纹丝不动。**这个结论是“可判定”的，不是“读不出”** —— 最初那轮评测跑在冒烟档 15 步上，
+存在“预算不够所以测不出”这个替代解释；随后用 40 步复测把它排除掉了（基座侧
+15→40 一动没动，训练侧放开到 40 步也没起来）。
+
+**主要产出不是这个结论，而是四处「静默失效」**：冒烟值漏进生产、数据谱系没验
+（120 题全部来自 SWE-bench Lite 的 `test` split、95% 是 django）、配对设计配了非配对检验，
+以及**跑实验的工装自己的判据也错了**。四处都不报错、无法从日志看出，但都足以让一个
+看起来干净的结论失去前提。完整边界、取证与反面教训见
+[SWE-GRPO on 2×L20](results/swe-grpo-l20-negative-result.md)。
+
+### 6. mini 框架的价值在“能验证和定位”，不是重复造完整 verl
 
 `mini_verl/` 刻意不复制 Ray、多机编排或生产级服务系统。它把下列边界拆开并加以测试：
 
@@ -103,6 +132,7 @@ rollout → trajectory / old logprob → reward → group advantage
 - 想看**最终 held-out 实验结论**：读 [679-step 结果](results/qwen3.5-4b-grpo-679-step.md)。
 - 想看**PPO 与 GRPO 的最新可行性/资源对照**：读 [PPO/GRPO 5-step 公平对照](../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md)，不要把它当最终质量结论。
 - 想看**此前 GRPO 的算法筛选**：读 [170-step 开发对照](results/qwen3.5-4b-grpo-170-step-development-ablation.md)，不要把它当最终泛化结论。
+- 想看**agentic RL（SWE-bench）的结论**：读 [SWE-GRPO on 2×L20](results/swe-grpo-l20-negative-result.md)。它是**负结果**，价值在于分离了记忆与泛化、并定位了四处静默失效，不是一个分数。
 - 想看**历史排障过程**：从 [官方实验资产索引](../official_verl/README.md) 进入 `docs/history/` 或 `docs/runlogs/`。这些是证据归档，**不是当前 roadmap**。
 - 想看完整文档分类：读 [文档导航](README.md)。
 
@@ -117,6 +147,7 @@ rollout → trajectory / old logprob → reward → group advantage
 | 多机、异构硬件、生产级容错 | 未做 | 有意不纳入教学/验证型最小实现 |
 | 多 seed 的算法对照 | 待做 | 170-step 单 seed 只提供筛选线索；需先固定新的 development / final 划分 |
 | formal-10k 对照实验 | 暂不启动 | 先决定算法变量与评测划分，再扩大数据规模，避免耗 GPU 做不可解释的长跑 |
+| SWE / agentic RL 的**迁移** | 未达成（可判定的负结果） | 200 步训练只产生记忆：训练池 13.9%→48.8%，零重叠留出池无变化（40 步复测 p = 1.0000）。下一步要么换题源（当前 120 题全部来自 SWE-bench Lite `test` split、95% django），要么换成**基座可解 30–50% 的题池**（现在留出池题级天花板只有 7/65 = 10.8%，离地板太近） |
 
 ## 下一步
 
@@ -130,6 +161,11 @@ rollout → trajectory / old logprob → reward → group advantage
    formal-10k；训练后期长度接近 cap 的问题也应作为独立变量处理。
 5. **回写最小实现。** 只把已在官方链路中验证的 `dataset → rollout → verifier reward →
    group advantage → logprob → update → metrics` 语义映射回 `mini_verl`，不复制完整生产编排。
+6. **SWE / agentic RL 的下一步（尚未选定）。** 40 步复测已完成，「预算不够」这个替代解释
+   已排除，负结论定稿。接下来在三条里选：**(A)** 现有 55 题里筛掉 11 道从未成功过的死题
+   重训，测「无梯度题稀释」占多少；**(B)** 换一个基座可解 30–50% 的题池（要新拉镜像，
+   磁盘与 GPU 都有约束），这是目前最有希望的方向；**(C)** 先停在当前负结果上，把表述钉死。
+   发车前的动作预算断言已落地（`SWE_AGENT_STEP_LIMIT < 40` 直接拒绝启动）。
 
 ## 验证状态
 
@@ -146,3 +182,11 @@ trainer、pair 级 micro-batch 一致性与 Controller 集成测试；随后用�
 1 次 DPO 迭代 smoke（4 trajectories、mean_reward 0.5、初始 loss≈log 2、margin 0——初始
 policy 与 reference 相同的预期行为）。该 smoke 只验证管线，不是质量结论。验证在 agent 创建的
 隔离目录 `repos/mini-verl-dpo-verify-20260901/` 完成，未改动 `mini-verl-l20` 副本。
+
+2026-09-28：SWE / agentic RL（`swe-grpo-l20`）的 40 步复测完成，10/10 单元全部完整。
+配对读数 i199 32/520 vs base 30/520、题级 7/65 vs 7/65、判别对 1:1、McNemar p = 1.0000；
+基座侧 15→40 也一动没动（30/520 → 30/520，p = 1.0000）。⇒ 「预算不够所以测不出」
+这个替代解释被排除，**负结论定稿**。同时从 200 个 rollout dump 重算训练池可学带：
+797 组中全败 39.8% / 混合（有梯度）46.0% / 全胜 14.2%，55 道题里 44 道（80%）出过梯度、
+11 道（20%）从未成功。文档侧修正了两处自身判据（评测 run 的 judged 键不带 tag、
+dump 样本条目含重复导致「去重更干净」是错觉）。
