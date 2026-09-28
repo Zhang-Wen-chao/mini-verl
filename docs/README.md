@@ -22,6 +22,7 @@
 
 - [运行指南](guides/runbook.md)：测试、toy/HF benchmark、GPU pipeline。
 - [L20 实验与评测经验](operations/l20-lessons-learned.md)：解码超时、评分器、容器和 GPU 诊断。
+- [slime / SGLang 官方 quickstart 跑通记录](operations/slime-sglang-quickstart-4090d.md)：官方代码的 env 名错配、镜像版本门槛与 colocate 显存。
 - [官方 verl 实验索引](../official_verl/README.md)：官方训练栈的脚本、固定输入与历史证据。
 
 ## 5. 学习：理解术语与算法

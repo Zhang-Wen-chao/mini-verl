@@ -63,6 +63,7 @@ telemetry、限制和下一步见[170-step GRPO 开发对照](docs/results/qwen3
 | **此前 GRPO 算法对照说明什么？** | [170-step 开发对照](docs/results/qwen3.5-4b-grpo-170-step-development-ablation.md) | no-std vs standard 的完成证据、telemetry 与不可过度解释的边界 |
 | **代码实现了什么？** | [mini_verl 架构与实现进度](docs/architecture/mini-verl-architecture.md) | 数据流、模块职责、已完成的框架能力 |
 | **怎样跑测试、benchmark 或实验？** | [运行指南](docs/guides/runbook.md) | 本地、GPU 与官方 verl 的执行命令 |
+| **slime / SGLang 的官方 quickstart 能原样跑吗？** | [slime / SGLang quickstart 跑通记录](docs/operations/slime-sglang-quickstart-4090d.md) | **不能**：官方代码一处 env 名错配让 TP 内存校验反向；镜像版本与 colocate 显存门槛 |
 | **异步训练、PPO、GRPO 是什么？** | [RL 速成课](docs/guides/rl-crash-course.md) | 算法直觉与本仓库的对应关系 |
 | **官方 verl 脚本和历史证据在哪？** | [official_verl 实验索引](official_verl/README.md) | 可执行脚本、固定版本、结果、runlog 归档 |
 
