@@ -22,7 +22,8 @@
 ## 4. 操作：如何运行与复现
 
 - [运行指南](guides/runbook.md)：测试、toy/HF benchmark、GPU pipeline。
-- [L20 实验与评测经验](operations/l20-lessons-learned.md)：解码超时、评分器、容器和 GPU 诊断。
+- [L20 实验与评测经验](operations/l20-lessons-learned.md)：解码超时、评分器、容器和 GPU 诊断；坑 6–10 是**不报错的工程判据类**（配置逐跳传递、按名字匹配的清理器、守卫量错挂载点、自己的比率不能自证、修正后要回头查被放宽的判据）。
+- [SWE-GRPO 复现包](results/swe-grpo-l20-analysis/README.md)：负结果文档里每个训练池数字的重算脚本、dump 字段形状与**重跑应能对上的期望输出**；含「为什么不能对 dump 去重」的可重跑反例，以及发车前的动作预算断言。
 - [官方 verl 实验索引](../official_verl/README.md)：官方训练栈的脚本、固定输入与历史证据。
 
 ## 5. 学习：理解术语与算法
