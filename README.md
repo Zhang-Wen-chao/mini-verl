@@ -61,7 +61,7 @@ telemetry、限制和下一步见[170-step GRPO 开发对照](docs/results/qwen3
 | **4B 实验究竟取得了什么结果？** | [Qwen3.5-4B / 679-step 结果](docs/results/qwen3.5-4b-grpo-679-step.md) | 训练配置、评测协议、3.4× held-out 结果和边界 |
 | **PPO 与 GRPO 的最新对照说明什么？** | [PPO/GRPO 5-step 公平开发对照](official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md) | 相同 12-trajectory 预算下的可行性、资源代价与严格边界 |
 | **此前 GRPO 算法对照说明什么？** | [170-step 开发对照](docs/results/qwen3.5-4b-grpo-170-step-development-ablation.md) | no-std vs standard 的完成证据、telemetry 与不可过度解释的边界 |
-| **agentic RL（SWE-bench）的结果是什么？** | [SWE-GRPO on 2×L20](docs/results/swe-grpo-l20-negative-result.md) | **负结果**：训练池 13.9%→48.8%（记忆），但留出池 6 个采样点 5.8%→6.0%→5.0%→6.3%→6.7%→5.2% 无趋势；四处静默失效与「这个结论为何还不可判定」 |
+| **agentic RL（SWE-bench）的结果是什么？** | [SWE-GRPO on 2×L20](docs/results/swe-grpo-l20-negative-result.md) | **负结果**：训练池 13.9%→48.8%（记忆），但留出池 6 个采样点 5.8%→6.0%→5.0%→6.3%→6.7%→5.2% 无趋势；**40 步复测排除了「预算不够」这个替代解释**（i199 32/520 vs base 30/520，题级都是 7/65，p = 1.0000）；四处静默失效 |
 | **代码实现了什么？** | [mini_verl 架构与实现进度](docs/architecture/mini-verl-architecture.md) | 数据流、模块职责、已完成的框架能力 |
 | **怎样跑测试、benchmark 或实验？** | [运行指南](docs/guides/runbook.md) | 本地、GPU 与官方 verl 的执行命令 |
 | **异步训练、PPO、GRPO 是什么？** | [RL 速成课](docs/guides/rl-crash-course.md) | 算法直觉与本仓库的对应关系 |
