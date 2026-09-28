@@ -12,7 +12,7 @@
 - [Qwen3.5-4B / 170-step GRPO 开发对照](results/qwen3.5-4b-grpo-170-step-development-ablation.md)：no-std 与 standard GRPO 的单 seed 受控筛选；明确不是 held-out 算法结论。
 - [PPO/GRPO 5-step 公平开发对照](../official_verl/docs/runlogs/2026-08-22-qwen3.5-4b-ppo-grpo-fair-development-comparison.md)：相同 12-trajectory 预算下真实 Critic PPO 的可行性、资源代价与质量结论边界。
 - [510 → 679 训练中回落分析](results/step-510-to-679-regression-analysis.md)：为什么监控分数表面回落，以及评分器误杀边界。
-- [SWE-GRPO on 2×L20：一次没有迁移的 agentic RL 实验](results/swe-grpo-l20-negative-result.md)：**负结果**。训练池 13.9%→48.8%（记忆），留出池 5.8%→6.0%（测不到迁移）。主要收获是三处**静默失效**：冒烟值漏进生产（整轮评测跑在 15 步上）、数据谱系没验（120 题全部来自 SWE-bench Lite 的 `test` split、95% 是 django）、以及「修正一个错误后没回头检查被它连带放宽的判据」。
+- [SWE-GRPO on 2×L20：一次没有迁移的 agentic RL 实验](results/swe-grpo-l20-negative-result.md)：**负结果**。训练池 13.9%→48.8%（记忆），留出池 6 个点 5.8%→6.0%→5.0%→6.3%→6.7%→5.2%（无趋势，涨落全在 ±0.84σ 内）。主要收获是三处**静默失效**：冒烟值漏进生产（整轮评测跑在 15 步上）、数据谱系没验（120 题全部来自 SWE-bench Lite 的 `test` split、95% 是 django）、以及「修正一个错误后没回头检查被它连带放宽的判据」。
 
 ## 3. 实现：代码解决了哪些问题
 
